@@ -1,4 +1,5 @@
-import { pgSchema, uuid, text, timestamp, boolean, index, integer, varchar } from 'drizzle-orm/pg-core';
+import { pgSchema, uuid, text, timestamp, boolean, index, integer, varchar, jsonb } from 'drizzle-orm/pg-core';
+import type { QRDesign } from '@/lib/qr-design';
 
 export const appSchema = pgSchema('qrconnect');
 const createdAt = () => timestamp('created_at', { withTimezone: true }).defaultNow().notNull();
@@ -57,6 +58,8 @@ export const qrCodes = appSchema.table('qr_codes', {
   destinationUrl: text('destination_url').notNull(),
   title: varchar('title', { length: 255 }),
   qrType: varchar('qr_type', { length: 50 }).notNull().default('website'),
+  design: jsonb('design').$type<QRDesign>(),
+  trackingEnabled: boolean('tracking_enabled').notNull().default(true),
   isActive: boolean('is_active').notNull().default(true),
   totalScans: integer('total_scans').notNull().default(0),
   createdAt: createdAt(),

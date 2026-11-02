@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { useEffect, useState, useRef } from 'react';
 import {
   Accordion,
@@ -34,6 +35,7 @@ const faqs = [
 ];
 
 export const FAQSection = () => {
+  const { t: copy } = useTranslation('copy');
   const [isVisible, setIsVisible] = useState(false);
   const sectionRef = useRef<HTMLDivElement>(null);
 
@@ -64,11 +66,9 @@ export const FAQSection = () => {
           }`}
         >
           <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-foreground mb-4">
-            Frequently Asked Questions
-          </h2>
+            {copy("Frequently Asked Questions")}</h2>
           <p className="text-muted-foreground text-lg">
-            Everything you need to know about QRConnect
-          </p>
+            {copy("Everything you need to know about QRConnect")}</p>
         </div>
 
         {/* FAQ Accordion */}
@@ -85,10 +85,10 @@ export const FAQSection = () => {
                 className="border border-border/50 rounded-lg px-4 data-[state=open]:bg-muted/30"
               >
                 <AccordionTrigger className="text-left font-medium text-foreground hover:no-underline py-4">
-                  {faq.question}
+                  {copy(faq.question)}
                 </AccordionTrigger>
                 <AccordionContent className="text-muted-foreground pb-4">
-                  {faq.answer}
+                  {copy(faq.answer)}
                 </AccordionContent>
               </AccordionItem>
             ))}

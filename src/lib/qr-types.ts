@@ -1,3 +1,5 @@
+import type { QRDesign } from './qr-design';
+
 export interface QRCodeRecord {
   id: string;
   user_id: string;
@@ -5,6 +7,8 @@ export interface QRCodeRecord {
   destination_url: string;
   title: string | null;
   qr_type: string;
+  design: QRDesign | null;
+  tracking_enabled: boolean;
   is_active: boolean;
   total_scans: number;
   created_at: string;

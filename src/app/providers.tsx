@@ -8,6 +8,7 @@ import { useLanguageDirection } from '@/hooks/useLanguageDirection';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { Toaster } from '@/components/ui/toaster';
 import { Toaster as Sonner } from '@/components/ui/sonner';
+import { EditorNavigation } from '@/components/EditorNavigation';
 
 function LanguagePreference() {
   useLanguageDirection();
@@ -20,6 +21,6 @@ function LanguagePreference() {
 
 export default function Providers({ children }: { children: React.ReactNode }) {
   return <I18nextProvider i18n={i18n}><ThemeProvider attribute="class" defaultTheme="light" enableSystem>
-    <TooltipProvider><LanguagePreference />{children}<Toaster /><Sonner /></TooltipProvider>
+    <TooltipProvider><LanguagePreference /><EditorNavigation>{children}</EditorNavigation><Toaster /><Sonner /></TooltipProvider>
   </ThemeProvider></I18nextProvider>;
 }

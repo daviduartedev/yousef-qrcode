@@ -11,6 +11,7 @@ import {
 
 export function LanguageToggle() {
   const { i18n } = useTranslation();
+  const { t: copy } = useTranslation('copy');
 
   const changeLanguage = (lng: string) => {
     i18n.changeLanguage(lng);
@@ -33,7 +34,7 @@ export function LanguageToggle() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="h-9 w-9" aria-label="Change language">
+        <Button variant="ghost" size="icon" className="h-9 w-9" aria-label={copy('Change language')}>
           <Globe className="h-4 w-4" />
         </Button>
       </DropdownMenuTrigger>

@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { Facebook, Twitter, Linkedin, Instagram } from 'lucide-react';
 
 const footerLinks = {
@@ -15,6 +16,7 @@ const socialLinks = [
 ];
 
 export const Footer = () => {
+  const { t: copy } = useTranslation('copy');
   return (
     <footer className="bg-foreground text-background py-12 md:py-16">
       <div className="container mx-auto px-4">
@@ -23,8 +25,7 @@ export const Footer = () => {
           <div className="col-span-2 md:col-span-1">
             <h3 className="text-xl font-bold mb-4">QRConnect</h3>
             <p className="text-background/60 text-sm mb-4">
-              Modern QR Code and Digital Business Card platform for forward-thinking teams.
-            </p>
+              {copy("Modern QR Code and Digital Business Card platform for forward-thinking teams.")}</p>
             {/* Social Links */}
             <div className="flex gap-3">
               {socialLinks.map((social, index) => {
@@ -45,7 +46,7 @@ export const Footer = () => {
           {/* Links */}
           {Object.entries(footerLinks).map(([category, links]) => (
             <div key={category}>
-              <h4 className="font-semibold mb-4 text-sm">{category}</h4>
+              <h4 className="font-semibold mb-4 text-sm">{copy(category)}</h4>
               <ul className="space-y-2">
                 {links.map((link) => (
                   <li key={link}>
@@ -53,7 +54,7 @@ export const Footer = () => {
                       href="#"
                       className="text-background/60 text-sm hover:text-background transition-colors"
                     >
-                      {link}
+                      {copy(link)}
                     </a>
                   </li>
                 ))}
@@ -65,8 +66,7 @@ export const Footer = () => {
         {/* Bottom Bar */}
         <div className="border-t border-background/10 pt-8 text-center">
           <p className="text-background/60 text-sm">
-            © 2024 QRConnect. All rights reserved.
-          </p>
+            {copy("© 2024 QRConnect. All rights reserved.")}</p>
         </div>
       </div>
     </footer>

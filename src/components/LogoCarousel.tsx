@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from 'react-i18next';
 
 const logos = [
   "FutureWave",
@@ -14,6 +15,7 @@ const logos = [
 ];
 
 const LogoCarousel = () => {
+  const { t: copy } = useTranslation('copy');
   const sectionRef = useRef<HTMLDivElement>(null);
   const [isVisible, setIsVisible] = useState(true);
 
@@ -52,7 +54,7 @@ const LogoCarousel = () => {
     >
       <div className="text-center mb-8">
         <span className="text-muted-foreground text-xs tracking-[0.2em] uppercase">
-          TRUSTED BY LEADING BRANDS WORLDWIDE
+          {copy('TRUSTED BY LEADING BRANDS WORLDWIDE')}
         </span>
       </div>
       <div className="relative">

@@ -33,7 +33,14 @@ try {
     : ['ls-files', '--cached', '--others', '--exclude-standard', '-z'])
     .toString().split('\0').filter(Boolean);
   for (const name of new Set(names)) {
-    const content = staged ? git(['show', `:${name}`]) : readFileSync(name);
+    let content;
+    try { content = staged ? git(['show', `:${name}`]) : readFileSync(name); }
+    catch (error) {
+      // Git still lists a tracked file after an unstaged deletion. Its staged
+      // content and historical blobs remain covered by their respective scans.
+      if (!staged && error.code === 'ENOENT') continue;
+      throw error;
+    }
     scan(name, content);
   }
   if (process.argv.includes('--history')) {

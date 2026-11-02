@@ -14,8 +14,22 @@ function repository(t) {
     assert.equal(result.status, 0, result.stderr);
   };
   git('init', '--quiet');
-  return { dir, git, check: () => spawnSync(process.execPath, [cli, '--staged'], { cwd: dir, encoding: 'utf8' }) };
+  return { dir, git, check: (args = ['--staged']) => spawnSync(process.execPath, [cli, ...args], { cwd: dir, encoding: 'utf8' }) };
 }
+
+test('the working-tree scan permits a tracked deletion and still rejects secrets in remaining files', t => {
+  const { dir, git, check } = repository(t);
+  writeFileSync(join(dir, 'obsolete.ts'), 'export const obsolete = true;');
+  git('add', 'obsolete.ts');
+  rmSync(join(dir, 'obsolete.ts'));
+  assert.equal(check([]).status, 0);
+  const token = ['sb', 'secret', crypto.randomUUID().replaceAll('-', '')].join('_');
+  writeFileSync(join(dir, 'remaining.ts'), `export const key = '${token}';`);
+  const result = check([]);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /provider-token/);
+  assert.ok(!result.stderr.includes(token));
+});
 
 test('Git rejects a force-staged environment file without echoing its values', t => {
   const { dir, git, check } = repository(t);

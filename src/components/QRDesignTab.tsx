@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { DotType, CornerSquareType, CornerDotType } from "qr-code-styling";
 import { Input } from "@/components/ui/input";
 
@@ -49,6 +50,7 @@ const QRDesignTab = ({
   backgroundColor,
   onBackgroundColorChange,
 }: QRDesignTabProps) => {
+  const { t: copy } = useTranslation('copy');
   const handleEyeChange = (pattern: typeof eyePatterns[0]) => {
     onEyesTypeChange(pattern.type);
     onCornerDotTypeChange(pattern.cornerDot);
@@ -58,8 +60,8 @@ const QRDesignTab = ({
     <div className="space-y-6">
       {/* Pattern Section */}
       <div>
-        <h4 className="text-sm font-semibold mb-3">Pattern</h4>
-        <div className="flex gap-3 mb-3">
+        <h4 className="text-sm font-semibold mb-3">{copy("Pattern")}</h4>
+        <div className="flex flex-wrap gap-3 mb-3">
           {dotPatterns.map((pattern) => (
             <button
               key={pattern.type}
@@ -69,7 +71,7 @@ const QRDesignTab = ({
                   ? "border-primary"
                   : "border-border hover:border-primary/50"
               }`}
-              title={pattern.label}
+              title={copy(pattern.label)}
             >
               <PatternPreview type={pattern.type} color={dotsColor} />
             </button>
@@ -82,15 +84,17 @@ const QRDesignTab = ({
             <Input
               type="text"
               value={dotsColor}
+              aria-label={copy('Pattern color')}
               onChange={(e) => onDotsColorChange(e.target.value)}
-              placeholder="#000000"
+              placeholder={copy("#000000")}
               className="font-mono"
             />
           </div>
           <div className="relative">
             <input
               type="color"
-              value={dotsColor}
+              value={/^#[0-9a-fA-F]{6}$/.test(dotsColor) ? dotsColor : '#000000'}
+              aria-label={copy('Pick pattern color')}
               onChange={(e) => onDotsColorChange(e.target.value)}
               className="w-12 h-10 rounded cursor-pointer border border-border"
             />
@@ -100,7 +104,7 @@ const QRDesignTab = ({
 
       {/* Eyes Section */}
       <div>
-        <h4 className="text-sm font-semibold mb-3">Eyes</h4>
+        <h4 className="text-sm font-semibold mb-3">{copy("Eyes")}</h4>
         <div className="flex flex-wrap gap-3 mb-3">
           {eyePatterns.map((pattern, index) => (
             <button
@@ -111,7 +115,7 @@ const QRDesignTab = ({
                   ? "border-primary"
                   : "border-border hover:border-primary/50"
               }`}
-              title={pattern.label}
+              title={copy(pattern.label)}
             >
               <EyePreview type={pattern.type} cornerDot={pattern.cornerDot} color={eyesColor} />
             </button>
@@ -124,15 +128,17 @@ const QRDesignTab = ({
             <Input
               type="text"
               value={eyesColor}
+              aria-label={copy('Eye color')}
               onChange={(e) => onEyesColorChange(e.target.value)}
-              placeholder="#000000"
+              placeholder={copy("#000000")}
               className="font-mono"
             />
           </div>
           <div className="relative">
             <input
               type="color"
-              value={eyesColor}
+              value={/^#[0-9a-fA-F]{6}$/.test(eyesColor) ? eyesColor : '#000000'}
+              aria-label={copy('Pick eye color')}
               onChange={(e) => onEyesColorChange(e.target.value)}
               className="w-12 h-10 rounded cursor-pointer border border-border"
             />
@@ -142,21 +148,23 @@ const QRDesignTab = ({
 
       {/* Background Section */}
       <div>
-        <h4 className="text-sm font-semibold mb-3">Background</h4>
+        <h4 className="text-sm font-semibold mb-3">{copy("Background")}</h4>
         <div className="flex gap-3">
           <div className="flex-1">
             <Input
               type="text"
               value={backgroundColor}
+              aria-label={copy('Background color')}
               onChange={(e) => onBackgroundColorChange(e.target.value)}
-              placeholder="#FFFFFF"
+              placeholder={copy("#FFFFFF")}
               className="font-mono"
             />
           </div>
           <div className="relative">
             <input
               type="color"
-              value={backgroundColor}
+              value={/^#[0-9a-fA-F]{6}$/.test(backgroundColor) ? backgroundColor : '#ffffff'}
+              aria-label={copy('Pick background color')}
               onChange={(e) => onBackgroundColorChange(e.target.value)}
               className="w-12 h-10 rounded cursor-pointer border border-border"
             />

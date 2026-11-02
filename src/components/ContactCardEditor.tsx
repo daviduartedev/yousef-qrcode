@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { useState, useRef } from "react";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -95,12 +96,11 @@ interface SocialLink {
 }
 
 const ContactCardEditor = () => {
+  const { t: copy } = useTranslation('copy');
   const [selectedTemplate, setSelectedTemplate] = useState(1);
   const [primaryColor, setPrimaryColor] = useState("#FF9900");
   const [secondaryTextColor, setSecondaryTextColor] = useState("#16212F");
   const [profileTextColor, setProfileTextColor] = useState("#000000");
-  const [updateLater, setUpdateLater] = useState(false);
-  const [trackAnalytics, setTrackAnalytics] = useState(false);
   const [addToWallet, setAddToWallet] = useState(false);
   const [selectedSocial, setSelectedSocial] = useState<string | null>("linkedin");
   const [socialLinks, setSocialLinks] = useState<SocialLink[]>([
@@ -180,7 +180,7 @@ const ContactCardEditor = () => {
       <div className="space-y-6">
         {/* Select Design */}
         <div>
-          <h3 className="text-sm font-semibold mb-3 text-foreground">Select a Design</h3>
+          <h3 className="text-sm font-semibold mb-3 text-foreground">{copy("Select a Design")}</h3>
           <div className="flex items-center gap-2">
             <button
               onClick={() => scrollTemplates('left')}
@@ -297,7 +297,7 @@ const ContactCardEditor = () => {
         {/* Color Pickers */}
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="text-xs font-medium text-muted-foreground block mb-1">Primary</label>
+            <label className="text-xs font-medium text-muted-foreground block mb-1">{copy("Primary")}</label>
             <div className="flex items-center gap-2">
               <Input
                 value={primaryColor}
@@ -313,7 +313,7 @@ const ContactCardEditor = () => {
             </div>
           </div>
           <div>
-            <label className="text-xs font-medium text-muted-foreground block mb-1">Profile Text</label>
+            <label className="text-xs font-medium text-muted-foreground block mb-1">{copy("Profile Text")}</label>
             <div className="flex items-center gap-2">
               <Input
                 value={profileTextColor}
@@ -329,7 +329,7 @@ const ContactCardEditor = () => {
             </div>
           </div>
           <div className="col-span-2">
-            <label className="text-xs font-medium text-muted-foreground block mb-1">Secondary Text</label>
+            <label className="text-xs font-medium text-muted-foreground block mb-1">{copy("Secondary Text")}</label>
             <div className="flex items-center gap-2">
               <Input
                 value={secondaryTextColor}
@@ -355,7 +355,7 @@ const ContactCardEditor = () => {
     {/* Renderiza a imagem do estado (que começa com a sua bg-girl) */}
     <img
       src={contactData.photo || undefined}
-      alt="Profile"
+      alt={copy("Profile")}
       className="w-full h-full object-cover transition-opacity group-hover:opacity-80"
     />
 
@@ -380,103 +380,96 @@ const ContactCardEditor = () => {
   />
 
   <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">
-    Clique na imagem para alterar
-  </p>
+    {copy("Clique na imagem para alterar")}</p>
 </div>
 
         {/* Contact Form Fields */}
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="text-xs font-medium text-muted-foreground block mb-1">Name</label>
+            <label className="text-xs font-medium text-muted-foreground block mb-1">{copy("Name")}</label>
             <Input
               value={contactData.firstName}
               onChange={(e) => updateContactField('firstName', e.target.value)}
-              placeholder="First Name"
+              placeholder={copy("First Name")}
             />
           </div>
           <div>
-            <label className="text-xs font-medium text-muted-foreground block mb-1">Last Name</label>
+            <label className="text-xs font-medium text-muted-foreground block mb-1">{copy("Last Name")}</label>
             <Input
               value={contactData.lastName}
               onChange={(e) => updateContactField('lastName', e.target.value)}
-              placeholder="Last Name"
+              placeholder={copy("Last Name")}
             />
           </div>
           <div>
-            <label className="text-xs font-medium text-muted-foreground block mb-1">Designation</label>
+            <label className="text-xs font-medium text-muted-foreground block mb-1">{copy("Designation")}</label>
             <Input
               value={contactData.designation}
               onChange={(e) => updateContactField('designation', e.target.value)}
-              placeholder="Job Title"
+              placeholder={copy("Job Title")}
             />
           </div>
           <div>
-            <label className="text-xs font-medium text-muted-foreground block mb-1">Company</label>
+            <label className="text-xs font-medium text-muted-foreground block mb-1">{copy("Company")}</label>
             <Input
               value={contactData.company}
               onChange={(e) => updateContactField('company', e.target.value)}
-              placeholder="Company Name"
+              placeholder={copy("Company Name")}
             />
           </div>
         </div>
 
         <div>
-          <label className="text-xs font-medium text-muted-foreground block mb-1">Summary</label>
+          <label className="text-xs font-medium text-muted-foreground block mb-1">{copy("Summary")}</label>
           <Textarea
             value={contactData.summary}
             onChange={(e) => updateContactField('summary', e.target.value)}
-            placeholder="Brief description about yourself"
+            placeholder={copy("Brief description about yourself")}
             rows={2}
           />
         </div>
 
         <div>
-          <label className="text-xs font-medium text-muted-foreground block mb-1">Website</label>
+          <label className="text-xs font-medium text-muted-foreground block mb-1">{copy("Website")}</label>
           <Input
             value={contactData.website}
             onChange={(e) => updateContactField('website', e.target.value)}
-            placeholder="your-website.com"
+            placeholder={copy("your-website.com")}
           />
         </div>
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="text-xs font-medium text-muted-foreground block mb-1">Phone</label>
+            <label className="text-xs font-medium text-muted-foreground block mb-1">{copy("Phone")}</label>
             <Input
               value={contactData.phone}
               onChange={(e) => updateContactField('phone', e.target.value)}
-              placeholder="Phone number"
+              placeholder={copy("Phone number")}
             />
           </div>
           <div>
-            <label className="text-xs font-medium text-muted-foreground block mb-1">Email</label>
+            <label className="text-xs font-medium text-muted-foreground block mb-1">{copy("Email")}</label>
             <Input
               value={contactData.email}
               onChange={(e) => updateContactField('email', e.target.value)}
-              placeholder="email@example.com"
+              placeholder={copy("email@example.com")}
             />
           </div>
         </div>
 
         {/* Toggles */}
         <div className="flex flex-wrap gap-6 pt-2">
-          <div className="flex items-center gap-2">
-            <Switch checked={updateLater} onCheckedChange={setUpdateLater} />
-            <span className="text-sm font-medium">Update later</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <Switch checked={trackAnalytics} onCheckedChange={setTrackAnalytics} />
-            <span className="text-sm font-medium">Track analytics & GPS</span>
-          </div>
+
+
           <div className="flex items-center gap-2">
             <Switch checked={addToWallet} onCheckedChange={setAddToWallet} />
-            <span className="text-sm font-medium">Add to Apple/Google Wallet</span>
+            <span className="text-sm font-medium">{copy("Add to Apple/Google Wallet")}</span>
           </div>
         </div>
 
         {/* Social Links */}
         <div className="border-t border-border pt-4">
-          <label className="text-xs font-medium text-muted-foreground block mb-3">Add Social Links</label>
+          <label className="text-xs font-medium text-muted-foreground block mb-3">{copy("Add Social Links")}</label>
           <div className="flex flex-wrap gap-2 mb-3">
             {socialOptions.map((social) => {
               const Icon = social.icon;
@@ -511,7 +504,7 @@ const ContactCardEditor = () => {
               <Input
                 value={getSocialLinkUrl()}
                 onChange={(e) => updateSocialLink(e.target.value)}
-                placeholder={`Enter your ${socialOptions.find(s => s.id === selectedSocial)?.label} URL`}
+                placeholder={copy('Enter your {{network}} URL',{network:socialOptions.find(s=>s.id===selectedSocial)?.label})}
                 className="flex-1"
               />
             </div>
@@ -532,7 +525,7 @@ const ContactCardEditor = () => {
                 {contactData.photo ? (
                   <img
                     src={contactData.photo}
-                    alt="Profile"
+                    alt={copy("Profile")}
                     className="w-full h-full object-cover object-top"
                   />
                 ) : (
@@ -601,7 +594,7 @@ const ContactCardEditor = () => {
                     <p className="text-sm font-medium" style={{ color: profileTextColor }}>
                       {contactData.phone}
                     </p>
-                    <p className="text-xs text-gray-400">Work</p>
+                    <p className="text-xs text-gray-400">{copy("Work")}</p>
                   </div>
                 </div>
 
@@ -610,8 +603,7 @@ const ContactCardEditor = () => {
                   className="w-full mt-5 rounded-lg text-white font-medium py-3"
                   style={{ backgroundColor: '#1E3A5F' }}
                 >
-                  <span className="mr-2">☰</span> Add to contacts
-                </Button>
+                  <span className="mr-2">☰</span> {copy("Add to contacts")}</Button>
               </div>
             </div>
           )}
@@ -635,7 +627,7 @@ const ContactCardEditor = () => {
                   {/* Circular Photo */}
                   <div className="w-20 h-20 rounded-full overflow-hidden bg-gray-200 flex-shrink-0 border-4 border-white/30 absolute right-5 bottom-0 translate-y-1/2">
                     {contactData.photo ? (
-                      <img src={contactData.photo} alt="Profile" className="w-full h-full object-cover" />
+                      <img src={contactData.photo} alt={copy("Profile")} className="w-full h-full object-cover" />
                     ) : (
                       <div className="w-full h-full bg-gradient-to-br from-orange-300 to-orange-400 flex items-center justify-center">
                         <span className="text-white text-xl font-bold">{contactData.firstName.charAt(0)}{contactData.lastName.charAt(0)}</span>
@@ -664,7 +656,7 @@ const ContactCardEditor = () => {
                     </div>
                     <div>
                       <p className="text-sm font-medium" style={{ color: profileTextColor }}>{contactData.phone}</p>
-                      <p className="text-xs text-gray-400">Work</p>
+                      <p className="text-xs text-gray-400">{copy("Work")}</p>
                     </div>
                   </div>
 
@@ -678,7 +670,7 @@ const ContactCardEditor = () => {
                     </div>
                     <div>
                       <p className="text-sm font-medium" style={{ color: profileTextColor }}>{contactData.email}</p>
-                      <p className="text-xs text-gray-400">Work</p>
+                      <p className="text-xs text-gray-400">{copy("Work")}</p>
                     </div>
                   </div>
 
@@ -692,14 +684,14 @@ const ContactCardEditor = () => {
                     </div>
                     <div>
                       <p className="text-sm font-medium" style={{ color: profileTextColor }}>{contactData.website}</p>
-                      <p className="text-xs text-gray-400">Website</p>
+                      <p className="text-xs text-gray-400">{copy("Website")}</p>
                     </div>
                   </div>
                 </div>
 
                 {/* Connect with me */}
                 <div className="mt-5 text-center">
-                  <p className="text-sm text-gray-400">Connect with me on</p>
+                  <p className="text-sm text-gray-400">{copy("Connect with me on")}</p>
                   <div className="flex justify-center mt-2">
                     <Linkedin className="w-6 h-6" style={{ color: '#0A66C2' }} />
                   </div>
@@ -710,8 +702,7 @@ const ContactCardEditor = () => {
                   className="w-full mt-4 rounded-lg text-white font-medium py-3"
                   style={{ backgroundColor: '#3B82F6' }}
                 >
-                  + Add to Contacts
-                </Button>
+                  {copy("+ Add to Contacts")}</Button>
               </div>
             </div>
           )}
@@ -723,7 +714,7 @@ const ContactCardEditor = () => {
               <div className="flex justify-center">
                 <div className="w-full h-50 overflow-hidden cover-image">
                   {contactData.photo ? (
-                    <img src={contactData.photo} alt="Profile" className="w-full h-full object-cover" />
+                    <img src={contactData.photo} alt={copy("Profile")} className="w-full h-full object-cover" />
                   ) : (
                     <div className="w-full h-full bg-gradient-to-br from-orange-300 to-orange-400 flex items-center justify-center">
                       <span className="text-white text-xl font-bold">{contactData.firstName.charAt(0)}{contactData.lastName.charAt(0)}</span>
@@ -742,11 +733,10 @@ const ContactCardEditor = () => {
                   <Phone className="w-4 h-4" />
                   <span>{contactData.phone}</span>
                 </div>
-                <p className="text-xs text-gray-400">Work</p>
-                <p className="text-xs text-gray-400 mt-3">Saving to phone/camera roll</p>
+                <p className="text-xs text-gray-400">{copy("Work")}</p>
+                <p className="text-xs text-gray-400 mt-3">{copy("Saving to phone/camera roll")}</p>
                 <Button className="w-full mt-2 rounded-lg text-white" style={{ backgroundColor: currentTemplate.buttonColor }}>
-                  + Add to Contacts
-                </Button>
+                  {copy("+ Add to Contacts")}</Button>
               </div>
             </div>
           )}
@@ -764,7 +754,7 @@ const ContactCardEditor = () => {
                 <div className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2">
                   <div className="w-20 h-20 rounded-full overflow-hidden bg-gray-200 border-4 border-white shadow-lg">
                     {contactData.photo ? (
-                      <img src={contactData.photo} alt="Profile" className="w-full h-full object-cover" />
+                      <img src={contactData.photo} alt={copy("Profile")} className="w-full h-full object-cover" />
                     ) : (
                       <div className="w-full h-full bg-gradient-to-br from-purple-300 to-purple-400 flex items-center justify-center">
                         <span className="text-white text-xl font-bold">{contactData.firstName.charAt(0)}{contactData.lastName.charAt(0)}</span>
@@ -808,7 +798,7 @@ const ContactCardEditor = () => {
                       <p className="text-sm font-medium" style={{ color: profileTextColor }}>
                         {contactData.phone}
                       </p>
-                      <p className="text-xs" style={{ color: primaryColor }}>Work</p>
+                      <p className="text-xs" style={{ color: primaryColor }}>{copy("Work")}</p>
                     </div>
                   </div>
 
@@ -824,7 +814,7 @@ const ContactCardEditor = () => {
                       <p className="text-sm font-medium" style={{ color: profileTextColor }}>
                         {contactData.email}
                       </p>
-                      <p className="text-xs" style={{ color: primaryColor }}>Work</p>
+                      <p className="text-xs" style={{ color: primaryColor }}>{copy("Work")}</p>
                     </div>
                   </div>
 
@@ -840,14 +830,14 @@ const ContactCardEditor = () => {
                       <p className="text-sm font-medium" style={{ color: profileTextColor }}>
                         {contactData.website}
                       </p>
-                      <p className="text-xs" style={{ color: primaryColor }}>Website</p>
+                      <p className="text-xs" style={{ color: primaryColor }}>{copy("Website")}</p>
                     </div>
                   </div>
                 </div>
 
                 {/* Connect with me on */}
                 <div className="mt-5 text-center">
-                  <p className="text-sm text-gray-500 mb-2">Connect with me on</p>
+                  <p className="text-sm text-gray-500 mb-2">{copy("Connect with me on")}</p>
                   <div className="flex justify-center">
                     <Linkedin className="w-6 h-6" style={{ color: '#0A66C2' }} />
                   </div>
@@ -858,8 +848,7 @@ const ContactCardEditor = () => {
                   className="w-full mt-4 rounded-lg text-white font-medium py-3 flex items-center justify-center gap-2"
                   style={{ backgroundColor: currentTemplate.buttonColor }}
                 >
-                  <span className="text-lg">⇄</span> Add to contacts
-                </Button>
+                  <span className="text-lg">⇄</span> {copy("Add to contacts")}</Button>
               </div>
             </div>
           )}
@@ -877,7 +866,7 @@ const ContactCardEditor = () => {
               <div className="flex justify-center -mt-12">
                 <div className="w-20 h-20 rounded-md overflow-hidden bg-gray-200 border-4 border-white shadow-lg">
                   {contactData.photo ? (
-                    <img src={contactData.photo} alt="Profile" className="w-full h-full object-cover" />
+                    <img src={contactData.photo} alt={copy("Profile")} className="w-full h-full object-cover" />
                   ) : (
                     <div className="w-full h-full bg-gradient-to-br from-blue-300 to-blue-400 flex items-center justify-center">
                       <span className="text-white text-xl font-bold">{contactData.firstName.charAt(0)}{contactData.lastName.charAt(0)}</span>
@@ -920,7 +909,7 @@ const ContactCardEditor = () => {
                       <p className="text-sm font-medium" style={{ color: profileTextColor }}>
                         {contactData.phone}
                       </p>
-                      <p className="text-xs text-gray-400">Work</p>
+                      <p className="text-xs text-gray-400">{copy("Work")}</p>
                     </div>
                   </div>
 
@@ -936,7 +925,7 @@ const ContactCardEditor = () => {
                       <p className="text-sm font-medium" style={{ color: profileTextColor }}>
                         {contactData.email}
                       </p>
-                      <p className="text-xs text-gray-400">Work</p>
+                      <p className="text-xs text-gray-400">{copy("Work")}</p>
                     </div>
                   </div>
 
@@ -952,14 +941,14 @@ const ContactCardEditor = () => {
                       <p className="text-sm font-medium" style={{ color: profileTextColor }}>
                         {contactData.website}
                       </p>
-                      <p className="text-xs text-gray-400">Website</p>
+                      <p className="text-xs text-gray-400">{copy("Website")}</p>
                     </div>
                   </div>
                 </div>
 
                 {/* Connect with me on */}
                 <div className="mt-5 text-center">
-                  <p className="text-sm text-gray-400 mb-2">Connect with me on</p>
+                  <p className="text-sm text-gray-400 mb-2">{copy("Connect with me on")}</p>
                   <div className="flex justify-center">
                     <Linkedin className="w-6 h-6" style={{ color: '#0A66C2' }} />
                   </div>
@@ -970,8 +959,7 @@ const ContactCardEditor = () => {
                   className="w-full mt-4 rounded-lg text-white font-medium py-3 flex items-center justify-center gap-2"
                   style={{ backgroundColor: primaryColor }}
                 >
-                  <span className="text-lg">⇄</span> Add to contacts
-                </Button>
+                  <span className="text-lg">⇄</span> {copy("Add to contacts")}</Button>
               </div>
             </div>
           )}
@@ -979,14 +967,13 @@ const ContactCardEditor = () => {
 
         {/* Sign up section */}
         <Input
-          placeholder="Enter your email address"
+          placeholder={copy("Enter your email address")}
           type="email"
           className="w-full"
         />
         <Button size="lg" className="w-full">
-          Sign up to save
-        </Button>
-        <p className="text-xs text-muted-foreground text-center">No credit card required</p>
+          {copy("Sign up to save")}</Button>
+        <p className="text-xs text-muted-foreground text-center">{copy("No credit card required")}</p>
       </div>
     </div>
   );

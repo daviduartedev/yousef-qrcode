@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { useEffect, useState, useRef } from 'react';
 import { Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -65,6 +66,7 @@ const pricingPlans: PricingPlan[] = [
 
 
 export const PricingSection = () => {
+  const { t: copy } = useTranslation('copy');
   const [isVisible, setIsVisible] = useState(false);
   const sectionRef = useRef<HTMLDivElement>(null);
 
@@ -95,11 +97,9 @@ export const PricingSection = () => {
           }`}
         >
           <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-foreground mb-4">
-            Simple, Transparent Pricing
-          </h2>
+            {copy("Simple, Transparent Pricing")}</h2>
           <p className="text-muted-foreground text-lg">
-            Choose the plan that&apos;s right for you
-          </p>
+            {copy("Choose the plan that's right for you")}</p>
         </div>
 
         {/* Pricing Cards */}
@@ -118,26 +118,25 @@ export const PricingSection = () => {
               {plan.popular && (
                 <div className="absolute -top-3 left-1/2 -translate-x-1/2">
                   <span className="bg-blue-500 text-white text-xs font-semibold px-3 py-1 rounded-full">
-                    Most Popular
-                  </span>
+                    {copy("Most Popular")}</span>
                 </div>
               )}
 
               {/* Plan Header */}
               <div className="mb-6">
                 <h3 className={`text-xl font-semibold mb-2 ${plan.highlighted ? 'text-primary-foreground' : 'text-foreground'}`}>
-                  {plan.name}
+                  {copy(plan.name)}
                 </h3>
                 <p className={`text-sm mb-4 ${plan.highlighted ? 'text-primary-foreground/80' : 'text-muted-foreground'}`}>
-                  {plan.description}
+                  {copy(plan.description)}
                 </p>
                 <div className="flex items-baseline">
                   <span className={`text-4xl font-bold ${plan.highlighted ? 'text-primary-foreground' : 'text-foreground'}`}>
-                    {plan.price}
+                    {copy(plan.price)}
                   </span>
                   {plan.period && (
                     <span className={`ml-1 ${plan.highlighted ? 'text-primary-foreground/80' : 'text-muted-foreground'}`}>
-                      {plan.period}
+                      {copy(plan.period)}
                     </span>
                   )}
                 </div>
@@ -149,7 +148,7 @@ export const PricingSection = () => {
                   <li key={featureIndex} className="flex items-center gap-2">
                     <Check className={`w-4 h-4 ${plan.highlighted ? 'text-primary-foreground' : 'text-primary'}`} />
                     <span className={`text-sm ${plan.highlighted ? 'text-primary-foreground/90' : 'text-foreground'}`}>
-                      {feature}
+                      {copy(feature)}
                     </span>
                   </li>
                 ))}
@@ -163,7 +162,7 @@ export const PricingSection = () => {
                     : 'bg-primary text-primary-foreground hover:bg-primary/90'
                 }`}
               >
-                {plan.buttonText}
+                {copy(plan.buttonText)}
               </Button>
             </div>
           ))}

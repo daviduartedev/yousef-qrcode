@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { useEffect, useState, useRef } from 'react';
 import { Zap, BarChart3, Smartphone, Globe } from 'lucide-react';
 
@@ -41,6 +42,7 @@ const features: Feature[] = [
 ];
 
 export const FeaturesSection = () => {
+  const { t: copy } = useTranslation('copy');
   const [isVisible, setIsVisible] = useState(false);
   const sectionRef = useRef<HTMLDivElement>(null);
 
@@ -74,11 +76,9 @@ export const FeaturesSection = () => {
           }`}
         >
           <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-foreground mb-4">
-            Everything You Need to Succeed
-          </h2>
+            {copy("Everything You Need to Succeed")}</h2>
           <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
-            Powerful features designed for modern marketing teams
-          </p>
+            {copy("Powerful features designed for modern marketing teams")}</p>
         </div>
 
         {/* Feature Cards */}
@@ -100,10 +100,10 @@ export const FeaturesSection = () => {
 
                 {/* Content */}
                 <h3 className="text-lg font-semibold text-foreground mb-3">
-                  {feature.title}
+                  {copy(feature.title)}
                 </h3>
                 <p className="text-muted-foreground text-sm leading-relaxed mb-4">
-                  {feature.description}
+                  {copy(feature.description)}
                 </p>
 
                 {/* Link */}
@@ -111,8 +111,7 @@ export const FeaturesSection = () => {
                   href="#"
                   className="inline-flex items-center text-primary text-sm font-medium hover:underline transition-colors"
                 >
-                  Learn More →
-                </a>
+                  {copy("Learn More →")}</a>
               </div>
             );
           })}

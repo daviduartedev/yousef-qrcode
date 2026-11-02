@@ -47,7 +47,7 @@ try {
   }
   if (!ready) throw new Error('Test server did not become ready. Run npm run build first.');
   console.log('Running HTTP integration tests against a disposable local Postgres database.');
-  process.exitCode = await run(['--test', 'tests/api.test.mjs']);
+  process.exitCode = await run(['--test', ...(process.env.TEST_NAME_PATTERN ? ['--test-name-pattern', process.env.TEST_NAME_PATTERN] : []), 'tests/api.test.mjs']);
 } catch {
   console.error('API tests could not run. Check the local database and run npm run build first. Private details hidden.');
   process.exitCode = 1;

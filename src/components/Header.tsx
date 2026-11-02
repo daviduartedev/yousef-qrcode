@@ -5,14 +5,17 @@ import { ThemeToggle } from "./ThemeToggle";
 import { LanguageToggle } from "./LanguageToggle";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/hooks/useAuth";
-import { useRouter, usePathname } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { LogOut, User, QrCode } from "lucide-react";
+import Link from 'next/link';
+import { useEditorNavigation } from './EditorNavigation';
 
 const Header = () => {
+  const { t: copy } = useTranslation('copy');
   const { t } = useTranslation();
   const { user, signOut } = useAuth();
   const pathname = usePathname();
-  const navigate = useRouter().push;
+  const {navigate,confirmLeave}=useEditorNavigation();
 
   const scrollToSection = (sectionId: string) => {
     const element = document.getElementById(sectionId);
@@ -22,13 +25,14 @@ const Header = () => {
   };
 
   const handleLogout = async () => {
+    if (!confirmLeave()) return;
     await signOut();
     navigate("/");
   };
 
   return (
     <header className="bg-background border-b border-border py-4 px-6">
-      <div className="max-w-7xl mx-auto flex items-center justify-between">
+      <div className="max-w-7xl mx-auto flex flex-wrap gap-3 items-center justify-between">
         <div className="flex items-center gap-8">
           <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigate("/")}>
             <div className="w-6 h-6 bg-foreground rounded-sm flex items-center justify-center">
@@ -37,7 +41,7 @@ const Header = () => {
             <span className="text-xl font-bold">{t('header.logo')}</span>
           </div>
 
-          <nav className="hidden md:flex items-center gap-6">
+          <nav className="hidden xl:flex items-center gap-6">
             <button
               onClick={() => scrollToSection('qr-generator')}
               className="text-sm font-medium hover:text-primary transition-colors"
@@ -90,9 +94,8 @@ const Header = () => {
                 className="hidden md:flex"
               >
                 <QrCode className="w-4 h-4 mr-2" />
-                Meus QR Codes
-              </Button>
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-muted rounded-lg">
+                {copy("Meus QR Codes")}</Button>
+              <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 bg-muted rounded-lg">
                 <User className="w-4 h-4 text-muted-foreground" />
                 <span className="text-sm font-medium truncate max-w-[150px]">
                   {user.email}
@@ -105,8 +108,7 @@ const Header = () => {
                 className="text-muted-foreground hover:text-foreground"
               >
                 <LogOut className="w-4 h-4 mr-1" />
-                Sair
-              </Button>
+                {copy("Sair")}</Button>
             </>
           ) : (
             <>
@@ -129,6 +131,11 @@ const Header = () => {
           )}
         </div>
       </div>
+      <nav aria-label={copy('Workspace navigation')} className="max-w-7xl mx-auto flex flex-wrap gap-5 pt-3 text-sm">
+        <Link href="/" className="hover:text-primary">{copy('Home')}</Link>
+        <Link href="/app" className="hover:text-primary">{copy('Create QR Code')}</Link>
+        <Link href="/my-qrcodes" className="hover:text-primary">{copy('My QR Codes')}</Link>
+      </nav>
     </header>
   );
 };
