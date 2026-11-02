@@ -1,4 +1,5 @@
 'use client';
+import { useTranslation } from 'react-i18next';
 
 import { Button } from "@/components/ui/button";
 import LandingHeader from "@/components/LandingHeader";
@@ -18,6 +19,7 @@ import { useRouter } from 'next/navigation';
 const dashboardPreview = '/assets/dashboard-preview.png';
 
 const LandingPage = () => {
+  const { t: copy } = useTranslation('copy');
   const navigate = useRouter().push;
 
   return (
@@ -31,16 +33,15 @@ const LandingPage = () => {
             {/* Left Column - Text Content */}
             <div className="space-y-6">
               <h1 className="text-5xl lg:text-6xl font-bold leading-tight">
-                <span className="text-foreground">Modern QR Code &</span>
+                <span className="text-foreground">{copy("Modern QR Code &")}</span>
                 <br />
-                <span className="text-primary">Digital Business Card</span>
+                <span className="text-primary">{copy("Digital Business Card")}</span>
                 <br />
-                <span className="text-foreground">Platform</span>
+                <span className="text-foreground">{copy("Platform")}</span>
               </h1>
 
               <p className="text-lg text-muted-foreground leading-relaxed max-w-xl">
-                Create, manage, and track QR codes and digital business cards at scale. Trusted by leading brands worldwide.
-              </p>
+                {copy("Create, manage, and track QR codes and digital business cards at scale. Trusted by leading brands worldwide.")}</p>
 
               <div className="flex flex-col sm:flex-row gap-4 pt-4">
                 <Button
@@ -48,16 +49,14 @@ const LandingPage = () => {
                   className="bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg px-8 h-12 text-base font-medium"
                   onClick={() => navigate("/app")}
                 >
-                  Start Free Trial
-                </Button>
+                  {copy("Start Free Trial")}</Button>
                 <Button
                   size="lg"
                   variant="outline"
                   className="border-2 border-primary text-primary hover:bg-primary hover:text-primary-foreground rounded-lg px-8 h-12 text-base font-medium bg-transparent"
                   onClick={() => navigate("/app")}
                 >
-                  Book a Demo
-                </Button>
+                  {copy("Book a Demo")}</Button>
               </div>
             </div>
 
@@ -73,7 +72,7 @@ const LandingPage = () => {
                       {/* Dashboard Preview */}
                       <img
                         src={dashboardPreview}
-                        alt="QRConnect Dashboard"
+                        alt={copy("QRConnect Dashboard")}
                         className="w-full h-auto object-cover"
                       />
                     </div>

@@ -12,6 +12,16 @@ Migração do produto existente para Next.js App Router, preservando as telas da
 
 A validação humana local deste lote foi concluída em 02/11/2026. Cada lote seguinte deve começar de uma `main` atualizada, após integração do lote anterior.
 
+## Lote 2
+
+- Branch: `feat/lote-2-editor-qrcode`, criada da `main` atualizada.
+- [Especificação #6](https://github.com/daviduartedev/yousef-qrcode/issues/6); tickets [#7](https://github.com/daviduartedev/yousef-qrcode/issues/7), [#8](https://github.com/daviduartedev/yousef-qrcode/issues/8) e [#9](https://github.com/daviduartedev/yousef-qrcode/issues/9), com #9 dependente de #8.
+- Inglês/árabe, RTL e retorno compartilhados; preview e PNG/SVG usam o mesmo design, logo e moldura.
+- Design versionado e modo direto/rastreável persistidos. Reabertura altera somente a aparência e preserva destino, identidade e scans. Códigos sem design usam Classic sem alegar recuperar a aparência original.
+- Sem upload de logo próprio, GPS, Update Later ou formatos de exportação sem implementação.
+- [Preparação de publicação e retorno](docs/lotes/02-editor-qrcode/publicacao.md). Novo Supabase, importação real e ponte antiga continuam pendentes; este lote não os declara concluídos.
+- A validação humana local do Lote 2 foi concluída em 02/11/2026. Importação de dados reais, compatibilidade no serviço antigo e implantação em produção continuam sujeitas às etapas documentadas de publicação.
+
 ## Desenvolvimento local
 
 Requisitos: Node.js 22 ou superior, npm, Git e Docker com suporte a containers Linux.
@@ -67,7 +77,7 @@ O histórico antigo não foi importado. Nenhum ambiente, banco ou token do proje
 | `/qr?code=...` | Registra um scan e redireciona com HTTP 302, sem cache. |
 | `/api/auth/*` | Sessão e operações de autenticação. |
 | `/api/qr-codes` | Lista/criação autenticada; lista limitada aos 1.000 registros mais recentes nesta versão. |
-| `/api/qr-codes/{id}` | Exclusão pelo dono. |
+| `/api/qr-codes/{id}` | Leitura, atualização somente do design e exclusão pelo dono. |
 | `/api/qr-codes/{shortCode}/analytics` | Estatísticas agregadas no servidor e dez eventos recentes. |
 
 Novos destinos rastreáveis aceitam HTTP/HTTPS sem credenciais embutidas. A criação e exclusão exigem a origem configurada. A leitura pública registra eventos e incrementa o contador na mesma transação. Pedidos HEAD não criam scans. Há um limite de 300 eventos por minuto por código, verificado de forma transacional; acima disso a resposta é 429 com indicação para tentar novamente. Medidas adicionais de proteção de tráfego podem ser aplicadas na hospedagem.
@@ -78,7 +88,7 @@ Um código impresso que aponta ao endereço da função Supabase original contin
 
 ### Escopo preservado
 
-O Lote 1 preserva o editor e seus limites conhecidos. O seletor de formatos e alguns controles da interface herdada ainda exigem o lote de correções do editor. Templates, logos/molduras e exportações completas serão tratados naquele lote. O PNG existente na listagem foi preservado; isso não equivale a implementar todos os formatos do gerador. Idiomas e temas existentes foram mantidos, com textos fixos da landing ainda a traduzir.
+O Lote 1 preservou o editor e seus limites conhecidos. O Lote 2 conecta PNG/SVG ao design compartilhado, incorpora logos do catálogo e molduras, completa inglês/árabe nas telas do fluxo e acrescenta reabertura de aparência. Download sem tracking codifica diretamente o destino; com tracking codifica a URL pública do serviço. PDF/EPS e controles sem função foram retirados. Rascunhos do editor ficam em memória: a saída interna pede confirmação, o histórico permite retomada e uma recarga/fechamento com alterações pendentes usa o aviso do navegador.
 
 Linkpages publicadas, cartões publicados, formulários, cobrança, integrações e novos dashboards não fazem parte desta migração.
 

@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { useEffect, useState, useRef } from 'react';
 import { TrendingUp, Users, CalendarDays, ShoppingCart } from 'lucide-react';
 
@@ -41,6 +42,7 @@ const industries: Industry[] = [
 ];
 
 export const IndustriesSection = () => {
+  const { t: copy } = useTranslation('copy');
   const [isVisible, setIsVisible] = useState(false);
   const sectionRef = useRef<HTMLDivElement>(null);
 
@@ -71,11 +73,9 @@ export const IndustriesSection = () => {
           }`}
         >
           <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-foreground mb-4">
-            Built for Every Industry
-          </h2>
+            {copy("Built for Every Industry")}</h2>
           <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
-            From marketing to retail, our platform adapts to your needs
-          </p>
+            {copy("From marketing to retail, our platform adapts to your needs")}</p>
         </div>
 
         {/* Industry Cards */}
@@ -99,10 +99,10 @@ export const IndustriesSection = () => {
 
                 {/* Content */}
                 <h3 className="text-lg font-semibold text-foreground mb-3">
-                  {industry.title}
+                  {copy(industry.title)}
                 </h3>
                 <p className="text-muted-foreground text-sm leading-relaxed">
-                  {industry.description}
+                  {copy(industry.description)}
                 </p>
               </div>
             );

@@ -1,9 +1,11 @@
+import { useTranslation } from 'react-i18next';
 import { Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 
 export function ThemeToggle() {
+  const { t: copy } = useTranslation('copy');
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
 
@@ -26,7 +28,7 @@ export function ThemeToggle() {
       size="icon"
       onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
       className="h-9 w-9"
-      aria-label="Toggle theme"
+      aria-label={copy("Toggle theme")}
     >
       {theme === "dark" ? (
         <Sun className="h-4 w-4" />

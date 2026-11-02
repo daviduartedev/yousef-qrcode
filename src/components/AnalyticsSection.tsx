@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { useEffect, useState, useRef } from 'react';
 import { CheckCircle } from 'lucide-react';
 
@@ -9,6 +10,7 @@ const features = [
 ];
 
 export const AnalyticsSection = () => {
+  const { t: copy } = useTranslation('copy');
   const [isVisible, setIsVisible] = useState(false);
   const sectionRef = useRef<HTMLDivElement>(null);
 
@@ -40,14 +42,13 @@ export const AnalyticsSection = () => {
             }`}
           >
             <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold leading-tight">
-              <span className="text-foreground">Track Every Scan with</span>
+              <span className="text-foreground">{copy("Track Every Scan with")} {" "}</span>
               <br />
-              <span className="text-primary">Real-Time Analytics</span>
+              <span className="text-primary">{copy("Real-Time Analytics")}</span>
             </h2>
 
             <p className="text-muted-foreground text-lg max-w-lg">
-              Get detailed insights into who&apos;s scanning your QR codes, when, and where. Make data-driven decisions to optimize your campaigns.
-            </p>
+              {copy("Get detailed insights into who's scanning your QR codes, when, and where. Make data-driven decisions to optimize your campaigns.")}</p>
 
             <ul className="space-y-3">
               {features.map((feature, index) => (
@@ -57,7 +58,7 @@ export const AnalyticsSection = () => {
                   style={{ transitionDelay: `${index * 100 + 200}ms` }}
                 >
                   <CheckCircle className="w-5 h-5 text-primary" />
-                  <span>{feature}</span>
+                  <span>{copy(feature)}</span>
                 </li>
               ))}
             </ul>

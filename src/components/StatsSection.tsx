@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { useEffect, useState, useRef } from 'react';
 
 interface StatItem {
@@ -14,6 +15,7 @@ const stats: StatItem[] = [
 ];
 
 const AnimatedNumber = ({ value, suffix, isVisible }: { value: number; suffix: string; isVisible: boolean }) => {
+  const { t: copy } = useTranslation('copy');
   const [count, setCount] = useState(0);
 
   useEffect(() => {
@@ -38,12 +40,13 @@ const AnimatedNumber = ({ value, suffix, isVisible }: { value: number; suffix: s
 
   return (
     <span className="text-5xl md:text-6xl font-bold text-primary">
-      {count}{suffix}
+      {count}{copy(suffix)}
     </span>
   );
 };
 
 export const StatsSection = () => {
+  const { t: copy } = useTranslation('copy');
   const [isVisible, setIsVisible] = useState(false);
   const sectionRef = useRef<HTMLDivElement>(null);
 
@@ -83,7 +86,7 @@ export const StatsSection = () => {
               style={{ transitionDelay: `${index * 100}ms` }}
             >
               <AnimatedNumber value={stat.value} suffix={stat.suffix} isVisible={isVisible} />
-              <p className="mt-2 text-muted-foreground text-sm md:text-base">{stat.label}</p>
+              <p className="mt-2 text-muted-foreground text-sm md:text-base">{copy(stat.label)}</p>
             </div>
           ))}
         </div>

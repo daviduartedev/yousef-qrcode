@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { useEffect, useState, useRef } from 'react';
 
 const integrations = [
@@ -6,6 +7,7 @@ const integrations = [
 ];
 
 export const IntegrationsSection = () => {
+  const { t: copy } = useTranslation('copy');
   const [isVisible, setIsVisible] = useState(false);
   const sectionRef = useRef<HTMLDivElement>(null);
 
@@ -36,11 +38,9 @@ export const IntegrationsSection = () => {
           }`}
         >
           <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-foreground mb-4">
-            Seamless Integrations
-          </h2>
+            {copy("Seamless Integrations")}</h2>
           <p className="text-muted-foreground text-lg">
-            Connect with the tools you already use
-          </p>
+            {copy("Connect with the tools you already use")}</p>
         </div>
 
         {/* Integration Badges */}
@@ -57,7 +57,7 @@ export const IntegrationsSection = () => {
                   className="px-8 py-3 bg-background border border-border rounded-lg text-foreground font-medium text-sm hover:border-primary/50 hover:shadow-md transition-all duration-300 cursor-pointer"
                   style={{ transitionDelay: `${(rowIndex * 4 + index) * 50}ms` }}
                 >
-                  {integration}
+                  {copy(integration)}
                 </div>
               ))}
             </div>

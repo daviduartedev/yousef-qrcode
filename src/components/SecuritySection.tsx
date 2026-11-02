@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { useEffect, useState, useRef } from 'react';
 import { Shield, Lock, FileCheck, Award } from 'lucide-react';
 
@@ -31,6 +32,7 @@ const securityFeatures: SecurityFeature[] = [
 ];
 
 export const SecuritySection = () => {
+  const { t: copy } = useTranslation('copy');
   const [isVisible, setIsVisible] = useState(false);
   const sectionRef = useRef<HTMLDivElement>(null);
 
@@ -61,11 +63,9 @@ export const SecuritySection = () => {
           }`}
         >
           <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-foreground mb-4">
-            Enterprise-Grade Security
-          </h2>
+            {copy("Enterprise-Grade Security")}</h2>
           <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
-            Your data is protected with industry-leading security standards
-          </p>
+            {copy("Your data is protected with industry-leading security standards")}</p>
         </div>
 
         {/* Security Features */}
@@ -89,10 +89,10 @@ export const SecuritySection = () => {
 
                 {/* Content */}
                 <h3 className="text-base md:text-lg font-semibold text-foreground mb-2">
-                  {feature.title}
+                  {copy(feature.title)}
                 </h3>
                 <p className="text-muted-foreground text-sm">
-                  {feature.description}
+                  {copy(feature.description)}
                 </p>
               </div>
             );

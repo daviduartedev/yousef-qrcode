@@ -1,16 +1,35 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import dynamic from 'next/dynamic';
-const QRCodeStyled = dynamic(() => import('./QRCodeStyled'), { ssr: false });
+import dynamic from "next/dynamic";
+const QRCodeStyled = dynamic(() => import("./QRCodePreview"), { ssr: false });
 import QRDesignTab from "./QRDesignTab";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { useTranslation } from "react-i18next";
 import { useToast } from "@/hooks/use-toast";
 import ContactCardEditor from "./ContactCardEditor";
-import { createTrackedQRCode, getQRCodeAnalytics } from "@/lib/qrTracking";
+import {
+  saveNewQRCode,
+  saveQRCodeDesign,
+  getQRCode,
+  getTrackingUrl,
+  getQRCodeAnalytics,
+} from "@/lib/qrTracking";
+import { useSearchParams, useRouter } from "next/navigation";
+import { useAuth } from "@/hooks/useAuth";
+import { useEditorNavigation, DraftNotice } from "./EditorNavigation";
 import {
   Globe,
   FileText,
@@ -26,20 +45,13 @@ import {
   Image as ImageIcon,
   Palette,
   Frame as FrameIcon,
-  Facebook,
-  Linkedin,
-  Instagram,
-  Youtube,
-  Phone,
-  Mail,
-  Share2,
   Loader2,
   BarChart3,
   Smartphone,
   Monitor,
   MapPinned,
   Clock,
-  RefreshCw
+  RefreshCw,
 } from "lucide-react";
 import type { CornerDotType, CornerSquareType, DotType } from "qr-code-styling";
 
@@ -55,245 +67,243 @@ const tabs = [
   { icon: FileInput, labelKey: "qrGenerator.tabs.form" },
 ];
 
-// Expanded Template Types to match qr-code-styling options
-interface TemplateConfig {
-  id: number;
-  name: string;
-  dotsOptions: {
-    color?: string;
-    type: DotType;
-    gradient?: {
-      type: "linear" | "radial";
-      rotation?: number;
-      colorStops: { offset: number; color: string }[];
-    };
-  };
-  cornersSquareOptions?: {
-    color?: string;
-    type?: CornerSquareType;
-    gradient?: {
-      type: "linear" | "radial";
-      rotation?: number;
-      colorStops: { offset: number; color: string }[];
-    };
-  };
-  cornersDotOptions?: {
-    color?: string;
-    type?: CornerDotType;
-    gradient?: {
-      type: "linear" | "radial";
-      rotation?: number;
-      colorStops: { offset: number; color: string }[];
-    };
-  };
-  backgroundOptions?: {
-    color: string;
-    gradient?: {
-      type: "linear" | "radial";
-      rotation?: number;
-      colorStops: { offset: number; color: string }[];
-    };
-  };
-  imageOptions?: {
-    hideBackgroundDots: boolean;
-    imageSize: number;
-    margin: number;
-  };
-  // Frame/Footer simulation (rendered outside the QR canvas in some cases, or we can try to use text options if supported, but usually external is better)
-  frame?: {
-    text?: string;
-    style?: "black" | "blue" | "red" | "none";
-  };
-  containerClassName?: string;
-}
+import { templatesWithDesign as templates, logos } from "./qr-catalog";
+import {
+  defaultDesign,
+  qrDesignSchema,
+  hasVisibleContrast,
+  normalizeDestination,
+  frameStyles,
+  type QRDesign,
+} from "@/lib/qr-design";
+import { downloadQR } from "@/lib/qr-export";
+import type { QRAnalyticsResponse, QRCodeRecord } from "@/lib/qr-types";
 
-const templates: TemplateConfig[] = [
-  // 1. Basic Black/White
-  {
-    id: 1,
-    name: "Classic",
-    dotsOptions: { type: "square", color: "#000000" },
-    backgroundOptions: { color: "#ffffff" },
-    cornersSquareOptions: { type: "square", color: "#000000" },
-    cornersDotOptions: { type: "square", color: "#000000" }
-  },
-  // 2. Black/Red with SCAN ME (Simulated frame)
-  {
-    id: 2,
-    name: "Scan Me Red",
-    dotsOptions: { type: "square", color: "#000000" },
-    backgroundOptions: { color: "#ffffff" },
-    cornersSquareOptions: { type: "extra-rounded", color: "#FF0000" },
-    cornersDotOptions: { type: "dot", color: "#FF0000" },
-    frame: { text: "SCAN ME", style: "black" }
-  },
-  // 3. Instagram Style (Purple/Pink Gradient)
-  {
-    id: 3,
-    name: "Social",
-    dotsOptions: {
-      type: "dots",
-      gradient: {
-        type: "linear",
-        rotation: 45,
-        colorStops: [{ offset: 0, color: "#405DE6" }, { offset: 1, color: "#C13584" }]
-      }
-    },
-    backgroundOptions: { color: "#ffffff" },
-    cornersSquareOptions: { type: "extra-rounded", color: "#405DE6" }, // Approximation, gradient not supported on single color prop in simpler config sometimes, but checking types
-    cornersDotOptions: { type: "dot", color: "#C13584" }
-  },
-  // 4. Blue Circles
-  {
-    id: 4,
-    name: "Blue Circles",
-    dotsOptions: { type: "rounded", color: "#4B7CB0" },
-    backgroundOptions: { color: "#ffffff" },
-    cornersSquareOptions: { type: "extra-rounded", color: "#4B7CB0" },
-    cornersDotOptions: { type: "dot", color: "#4B7CB0" }
-  },
-  // 5. Green Nature
-  {
-    id: 5,
-    name: "Eco",
-    dotsOptions: {
-      type: "dots",
-      color: "#4CAF50"
-    },
-    backgroundOptions: { color: "#ffffff" },
-    cornersSquareOptions: { type: "dot", color: "#43A047" },
-    cornersDotOptions: { type: "dot", color: "#2E7D32" },
-    containerClassName: "rounded-full overflow-hidden border-4 border-[#4CAF50]"
-  },
-  // 6. Navy Blue with Footer
-  {
-    id: 6,
-    name: "Corporate",
-    dotsOptions: { type: "rounded", color: "#1E3A8A" }, // tailwind blue-900
-    backgroundOptions: { color: "#ffffff" },
-    cornersSquareOptions: { type: "dot", color: "#1E3A8A" },
-    cornersDotOptions: { type: "dot", color: "#1E3A8A" },
-    containerClassName: "rounded-full overflow-hidden border-4 border-[#1E3A8A]"
-  },
-  // 7. Lime/Purple
-  {
-    id: 7,
-    name: "Vibrant",
-    dotsOptions: { type: "classy", color: "#5F2EEA" },
-    backgroundOptions: { color: "#CCF381" },
-    cornersSquareOptions: { type: "extra-rounded", color: "#5F2EEA" },
-    cornersDotOptions: { type: "dot", color: "#5F2EEA" }
-  },
-  // 8. Orange/Black
-  {
-    id: 8,
-    name: "Abstract",
-    dotsOptions: { type: "classy-rounded", color: "#000000" },
-    backgroundOptions: { color: "#ffffff" },
-    cornersSquareOptions: { type: "extra-rounded", color: "#F97316" }, // orange-500
-    cornersDotOptions: { type: "dot", color: "#F97316" }
-  },
-  // 9. Red Corners Download
-  {
-    id: 9,
-    name: "Download",
-    dotsOptions: { type: "square", color: "#000000" },
-    backgroundOptions: { color: "#ffffff" },
-    cornersSquareOptions: { type: "square", color: "#DC2626" }, // red-600
-    cornersDotOptions: { type: "square", color: "#DC2626" },
-    frame: { text: "SCAN TO DOWNLOAD", style: "black" }
-  },
-  // 10. Gold/Black Luxury
-  {
-    id: 10,
-    name: "Prestige",
-    dotsOptions: { type: "square", color: "#D4AF37" }, // Gold
-    backgroundOptions: { color: "#000000" },
-    cornersSquareOptions: { type: "extra-rounded", color: "#ffffff" },
-    cornersDotOptions: { type: "dot", color: "#D4AF37" }
-  }
-];
-
-// Logo types - Lucide icons and custom SVG logos
-type LogoItem = {
-  id: string;
-  icon?: React.ComponentType<{ className?: string; style?: React.CSSProperties }>;
-  label: string;
-  color?: string;
-  svg?: string; // For custom SVG logos
-};
-
-const logos: LogoItem[] = [
-  // Row 1
-  { id: "openai", label: "OpenAI", svg: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6.0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.0966 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.2599 24a6.0557 6.0557 0 0 0 5.7718-4.2058 5.9894 5.9894 0 0 0 3.9977-2.9001 6.0557 6.0557 0 0 0-.7475-7.0729zm-9.022 12.6081a4.4755 4.4755 0 0 1-2.8764-1.0408l.1419-.0804 4.7783-2.7582a.7948.7948 0 0 0 .3927-.6813v-6.7369l2.02 1.1686a.071.071 0 0 1 .038.052v5.5826a4.504 4.504 0 0 1-4.4945 4.4944zm-9.6607-4.1254a4.4708 4.4708 0 0 1-.5346-3.0137l.142.0852 4.783 2.7582a.7712.7712 0 0 0 .7806 0l5.8428-3.3685v2.3324a.0804.0804 0 0 1-.0332.0615L9.74 19.9502a4.4992 4.4992 0 0 1-6.1408-1.6464zM2.3408 7.8956a4.485 4.485 0 0 1 2.3655-1.9728V11.6a.7664.7664 0 0 0 .3879.6765l5.8144 3.3543-2.0201 1.1685a.0757.0757 0 0 1-.071 0l-4.8303-2.7865A4.504 4.504 0 0 1 2.3408 7.8956zm16.0993 3.8558L12.6 8.3829l2.02-1.1638a.0757.0757 0 0 1 .071 0l4.8303 2.7913a4.4944 4.4944 0 0 1-.6765 8.1042v-5.6772a.79.79 0 0 0-.407-.667zm2.0107-3.0231l-.142-.0852-4.7735-2.7818a.7759.7759 0 0 0-.7854 0L9.409 9.2297V6.8974a.0662.0662 0 0 1 .0284-.0615l4.8303-2.7866a4.4992 4.4992 0 0 1 6.6802 4.66zM8.3065 12.863l-2.02-1.1638a.0804.0804 0 0 1-.038-.0567V6.0742a4.4992 4.4992 0 0 1 7.3757-3.4537l-.142.0805L8.704 5.459a.7948.7948 0 0 0-.3927.6813zm1.0976-2.3654l2.602-1.4998 2.6069 1.4998v2.9994l-2.5974 1.4997-2.6067-1.4997Z"/></svg>`, color: "#000000" },
-  { id: "facebook", icon: Facebook, label: "Facebook", color: "#1877F2" },
-  { id: "twitter", label: "X", svg: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>`, color: "#000000" },
-  { id: "whatsapp", label: "WhatsApp", svg: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>`, color: "#25D366" },
-  { id: "linkedin", icon: Linkedin, label: "LinkedIn", color: "#0A66C2" },
-  { id: "instagram", icon: Instagram, label: "Instagram", color: "#E4405F" },
-  { id: "appstore", label: "App Store", svg: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8.8 14.4l-3.5 6h2.3l.9-1.6h2.7l-1.3-2.3-1.1 2h-.6l.9-1.7-1.3-2.4zm6.8-6L12 14.6l-1.3-2.3-2.3 4.1 1.3 2.3 1-1.8 1 1.8h2.6L12 14.6l2.3-4.1h2.6l-3.5-6h-2.3l1.3 2.3 1.2-2.3zm-7.4 0l-3.5 6h2.6l3.5-6H8.2zm13.3 6l-3.5-6h-2.3l3.5 6h2.3z"/></svg>`, color: "#007AFF" },
-  { id: "googleplay", label: "Google Play", svg: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 20.5v-17c0-.83.67-1.5 1.5-1.5.31 0 .6.1.85.26l13.87 8.5c.5.31.78.85.78 1.24s-.28.93-.78 1.24l-13.87 8.5c-.25.16-.54.26-.85.26-.83 0-1.5-.67-1.5-1.5zm2-.5l10-6.5L5 7v13zm10-6.5L5 7l10 6.5z"/></svg>`, color: "#34A853" },
-  { id: "calendar", label: "Calendar", svg: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V10h14v10zM5 8V6h14v2H5zm2 4h10v2H7v-2zm0 4h7v2H7v-2z"/></svg>`, color: "#EA4335" },
-  { id: "slack", label: "Slack", svg: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zM6.313 15.165a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313zM8.834 5.042a2.528 2.528 0 0 1-2.521-2.52A2.528 2.528 0 0 1 8.834 0a2.528 2.528 0 0 1 2.521 2.522v2.52H8.834zM8.834 6.313a2.528 2.528 0 0 1 2.521 2.521 2.528 2.528 0 0 1-2.521 2.521H2.522A2.528 2.528 0 0 1 0 8.834a2.528 2.528 0 0 1 2.522-2.521h6.312zM18.956 8.834a2.528 2.528 0 0 1 2.522-2.521A2.528 2.528 0 0 1 24 8.834a2.528 2.528 0 0 1-2.522 2.521h-2.522V8.834zM17.688 8.834a2.528 2.528 0 0 1-2.523 2.521 2.527 2.527 0 0 1-2.52-2.521V2.522A2.527 2.527 0 0 1 15.165 0a2.528 2.528 0 0 1 2.523 2.522v6.312zM15.165 18.956a2.528 2.528 0 0 1 2.523 2.522A2.528 2.528 0 0 1 15.165 24a2.527 2.527 0 0 1-2.52-2.522v-2.522h2.52zM15.165 17.688a2.527 2.527 0 0 1-2.52-2.523 2.526 2.526 0 0 1 2.52-2.52h6.313A2.527 2.527 0 0 1 24 15.165a2.528 2.528 0 0 1-2.522 2.523h-6.313z"/></svg>`, color: "#4A154B" },
-  { id: "xcode", label: "Xcode", svg: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm0 2c5.523 0 10 4.477 10 10s-4.477 10-10 10S2 17.523 2 12 6.477 2 12 2zm0 3a7 7 0 100 14 7 7 0 000-14z"/></svg>`, color: "#FF6B35" },
-  { id: "youtube", icon: Youtube, label: "YouTube", color: "#FF0000" },
-  { id: "pinterest", label: "Pinterest", svg: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12.017 0C5.396 0 .029 5.367.029 11.987c0 5.079 3.158 9.417 7.618 11.162-.105-.949-.199-2.403.041-3.439.219-.937 1.406-5.957 1.406-5.957s-.359-.72-.359-1.781c0-1.663.967-2.911 2.168-2.911 1.024 0 1.518.769 1.518 1.688 0 1.029-.653 2.567-.992 3.992-.285 1.193.6 2.165 1.775 2.165 2.128 0 3.768-2.245 3.768-5.487 0-2.861-2.063-4.869-5.008-4.869-3.41 0-5.409 2.562-5.409 5.199 0 1.033.394 2.143.889 2.741.099.12.112.225.085.345-.09.375-.293 1.199-.334 1.363-.053.225-.172.271-.401.165-1.495-.69-2.433-2.878-2.433-4.646 0-3.776 2.748-7.252 7.92-7.252 4.158 0 7.392 2.967 7.392 6.923 0 4.135-2.607 7.462-6.233 7.462-1.214 0-2.354-.629-2.758-1.379l-.749 2.848c-.269 1.045-1.004 2.352-1.498 3.146 1.123.345 2.306.535 3.55.535 6.607 0 11.985-5.365 11.985-11.987C23.97 5.39 18.592.026 11.985.026L12.017 0z"/></svg>`, color: "#E60023" },
-  // Row 2
-  { id: "bitbucket", label: "Bitbucket", svg: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M.778 1.211a.768.768 0 00-.768.892l3.263 19.81c.084.5.515.868 1.022.873H19.95a.772.772 0 00.77-.646l3.27-20.03a.768.768 0 00-.768-.891zM14.52 15.53H9.522L8.17 8.466h7.561z"/></svg>`, color: "#0052CC" },
-  { id: "cashapp", label: "Cash App", svg: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M23.59 3.47A5.1 5.1 0 0020.55.33a24.68 24.68 0 00-4.87-.33c-2.74 0-5.27.17-5.27.17a24.68 24.68 0 00-4.87.33A5.1 5.1 0 002.5 3.47a24.68 24.68 0 00-.33 4.87c0 2.74.17 5.28.17 5.28a24.68 24.68 0 00.33 4.87 5.1 5.1 0 003.04 3.14c1.56.44 4.87.33 4.87.33s3.31.11 4.87-.33a5.1 5.1 0 003.04-3.14c.44-1.56.33-4.87.33-4.87s.11-3.31-.33-4.87zm-6.94 6.79c-.17.38-.42.72-.72 1.01-.3.29-.65.52-1.05.69-.4.17-.83.28-1.28.33v1.22h-1.5v-1.22a5.28 5.28 0 01-2.28-.83l.62-1.3c.56.36 1.2.59 1.87.68v-2.04a4.75 4.75 0 01-1.05-.4 2.43 2.43 0 01-.72-.56 2.08 2.08 0 01-.43-.72 2.8 2.8 0 01-.14-.92c0-.4.07-.75.21-1.07.14-.32.35-.6.61-.83.26-.23.57-.41.93-.54a3.8 3.8 0 011.17-.22V5.37h1.5v1.09c.63.08 1.23.27 1.78.56l-.5 1.34a4.19 4.19 0 00-1.57-.46v1.93c.45.12.84.27 1.17.43.33.16.61.35.82.57.21.22.37.47.47.75.1.28.16.6.16.95a2.81 2.81 0 01-.21 1.12zm-2.19-.26c.22-.09.4-.22.54-.38a1.1 1.1 0 00.29-.73c0-.28-.1-.5-.29-.68-.19-.18-.47-.33-.84-.46v2.37a1.79 1.79 0 01-.5.22zm-2.46-4.26c0 .24.09.44.26.6.17.16.43.3.78.41V5.5a1.4 1.4 0 00-.76.26.87.87 0 00-.28.67z"/></svg>`, color: "#00D632" },
-  { id: "paypal", label: "PayPal", svg: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7.076 21.337H2.47a.641.641 0 01-.633-.74L4.944 3.72a.778.778 0 01.768-.654h6.399c2.077 0 3.527.373 4.399 1.32.87.946 1.06 2.24.58 4.134l-.02.086c-.476 2.482-1.582 4.01-3.138 4.785-1.406.701-3.28.849-5.085.849H7.01a.78.78 0 00-.769.654l-.97 5.39a.64.64 0 01-.634.654l-.56-.001zm12.22-14.53c-.276 1.79-.792 3.011-1.63 3.853-.955.957-2.472 1.425-4.51 1.425h-1.5l-1.16 7.313h1.78c.345 0 .639-.252.692-.593l.03-.151.545-3.448.035-.191a.703.703 0 01.692-.593h.436c2.822 0 5.032-.877 5.94-3.417.38-1.062.488-1.943.344-2.649a2.265 2.265 0 00-.694-1.549z"/></svg>`, color: "#003087" },
-  { id: "venmo", label: "Venmo", svg: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M19.616 1.36c.796 1.313 1.153 2.666 1.153 4.378 0 5.453-4.656 12.534-8.433 17.502H5.122L2.122 2.05l6.558-.61 1.755 14.094c1.635-2.665 3.667-6.85 3.667-9.71 0-1.633-.278-2.747-.716-3.634z"/></svg>`, color: "#008CFF" },
-  { id: "figma", label: "Figma", svg: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M15.852 8.981h-4.588V0h4.588c2.476 0 4.49 2.014 4.49 4.49s-2.014 4.491-4.49 4.491zM12.735 7.51h3.117c1.665 0 3.019-1.355 3.019-3.019s-1.355-3.019-3.019-3.019h-3.117V7.51zM8.148 24c-2.476 0-4.49-2.014-4.49-4.49s2.014-4.49 4.49-4.49h4.588v4.441c0 2.503-2.047 4.539-4.588 4.539zm-.029-7.51a3.023 3.023 0 00-3.019 3.019 3.023 3.023 0 003.019 3.019c1.678 0 3.057-1.344 3.057-3.019v-3.019H8.119zM8.148 8.981c-2.476 0-4.49-2.014-4.49-4.49S5.672 0 8.148 0h4.588v8.981H8.148zm-.029-7.51a3.023 3.023 0 00-3.019 3.019 3.023 3.023 0 003.019 3.019h3.117V1.471H8.119zM15.852 24c-2.476 0-4.49-2.014-4.49-4.49v-4.49h4.49c2.476 0 4.49 2.014 4.49 4.49s-2.014 4.49-4.49 4.49zm0-7.51h-3.019v3.019a3.023 3.023 0 003.019 3.019 3.023 3.023 0 003.019-3.019 3.023 3.023 0 00-3.019-3.019zM8.148 15.02c-2.476 0-4.49-2.014-4.49-4.49s2.014-4.49 4.49-4.49h4.588v8.98H8.148zm-.029-7.51a3.023 3.023 0 00-3.019 3.019 3.023 3.023 0 003.019 3.019h3.117V7.51H8.119z"/></svg>`, color: "#F24E1E" },
-  { id: "yourlogo1", label: "Your Logo", svg: `<svg viewBox="0 0 40 40" fill="none"><rect width="40" height="40" rx="4" fill="#E5E7EB"/><text x="20" y="16" text-anchor="middle" font-size="6" fill="#6B7280">YOUR</text><text x="20" y="26" text-anchor="middle" font-size="6" fill="#6B7280">LOGO</text></svg>`, color: "#6B7280" },
-  { id: "yourlogo2", label: "Your Logo", svg: `<svg viewBox="0 0 40 40" fill="none"><rect width="40" height="40" rx="4" fill="#D4A574"/><text x="20" y="16" text-anchor="middle" font-size="6" fill="#FFFFFF">YOUR</text><text x="20" y="26" text-anchor="middle" font-size="6" fill="#FFFFFF">LOGO</text></svg>`, color: "#D4A574" },
-  { id: "trello", label: "Trello", svg: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M21 0H3C1.343 0 0 1.343 0 3v18c0 1.656 1.343 3 3 3h18c1.656 0 3-1.344 3-3V3c0-1.657-1.344-3-3-3zM10.44 18.18c0 .795-.645 1.44-1.44 1.44H4.56c-.795 0-1.44-.645-1.44-1.44V4.56c0-.795.645-1.44 1.44-1.44H9c.795 0 1.44.645 1.44 1.44v13.62zm10.44-6c0 .794-.645 1.44-1.44 1.44H15c-.795 0-1.44-.646-1.44-1.44V4.56c0-.795.646-1.44 1.44-1.44h4.44c.795 0 1.44.645 1.44 1.44v7.62z"/></svg>`, color: "#0052CC" },
-  { id: "scanme", label: "Scan Me", svg: `<svg viewBox="0 0 40 40" fill="none"><rect width="40" height="40" rx="4" fill="#1F2937"/><text x="20" y="16" text-anchor="middle" font-size="6" fill="#FFFFFF" font-weight="bold">SCAN</text><text x="20" y="26" text-anchor="middle" font-size="6" fill="#FFFFFF" font-weight="bold">ME</text></svg>`, color: "#1F2937" },
-  { id: "globe", label: "Website", svg: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>`, color: "#6B7280" },
-  { id: "phone", icon: Phone, label: "Phone", color: "#000000" },
-  { id: "email", icon: Mail, label: "Email", color: "#000000" },
-  // Row 3
-  { id: "share", icon: Share2, label: "Share", color: "#000000" },
-];
+const editorSnapshot = (
+  url: string,
+  design: QRDesign,
+  tracking: boolean,
+  tab: number,
+) => JSON.stringify({ url, design, tracking, tab });
 
 const QRGenerator = () => {
-  const { t } = useTranslation();
+  const { t: copy } = useTranslation("copy");
+  const { user } = useAuth();
+  const editId = useSearchParams().get("edit");
+  const router = useRouter();
+  const loadedSource = useRef<string | null | undefined>(undefined);
+  const { draft, updateDraft, hasDraft } = useEditorNavigation();
+  const blockedByDraft = hasDraft && draft.current?.editId !== editId;
+  const [record, setRecord] = useState<QRCodeRecord | null>(null);
+  const [ready, setReady] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+  const [baseline, setBaseline] = useState("");
+  const [design, setDesign] = useState<QRDesign>(() =>
+    structuredClone(defaultDesign),
+  );
+  const previewRef = useRef<HTMLDivElement>(null);
+  const [isDownloading, setIsDownloading] = useState(false);
+  const selectedTemplate = design.templateId;
+  const selectedLogo = design.logoId;
+  const setSelectedLogo = (id: string | null) =>
+    setDesign((previous) => ({
+      ...previous,
+      logoId: qrDesignSchema.shape.logoId.parse(id),
+    }));
+  const setSelectedTemplate = (id: number) =>
+    setDesign(
+      structuredClone(templates.find((item) => item.id === id)!.design),
+    );
+  const customDotsType = design.dotsOptions.type,
+    customDotsColor = design.dotsOptions.color;
+  const customCornersType = design.cornersSquareOptions.type,
+    customCornersColor = design.cornersSquareOptions.color;
+  const customCornersDotType = design.cornersDotOptions.type,
+    customBgColor = design.backgroundOptions.color;
+  const setCustomDotsType = (type: DotType) =>
+    setDesign((previous) => ({
+      ...previous,
+      dotsOptions: { ...previous.dotsOptions, type },
+    }));
+  const setCustomDotsColor = (color: string) =>
+    setDesign((previous) => ({
+      ...previous,
+      dotsOptions: { ...previous.dotsOptions, color, gradient: undefined },
+    }));
+  const setCustomCornersType = (type: CornerSquareType) =>
+    setDesign((previous) => ({
+      ...previous,
+      cornersSquareOptions: {
+        ...previous.cornersSquareOptions,
+        type: qrDesignSchema.shape.cornersSquareOptions.shape.type.parse(type),
+      },
+    }));
+  const setCustomCornersDotType = (type: CornerDotType) =>
+    setDesign((previous) => ({
+      ...previous,
+      cornersDotOptions: {
+        ...previous.cornersDotOptions,
+        type: qrDesignSchema.shape.cornersDotOptions.shape.type.parse(type),
+      },
+    }));
+  const setCustomCornersColor = (color: string) =>
+    setDesign((previous) => ({
+      ...previous,
+      cornersSquareOptions: {
+        ...previous.cornersSquareOptions,
+        color,
+        gradient: undefined,
+      },
+      cornersDotOptions: {
+        ...previous.cornersDotOptions,
+        color,
+        gradient: undefined,
+      },
+    }));
+  const setCustomBgColor = (color: string) =>
+    setDesign((previous) => ({ ...previous, backgroundOptions: { color } }));
+  const validDesign =
+    qrDesignSchema.safeParse(design).success && hasVisibleContrast(design);
+  const exportQR = async () => {
+    setIsDownloading(true);
+    try {
+      await downloadQR(
+        previewRef.current?.querySelector("svg") ?? null,
+        downloadFormat as "png" | "svg",
+      );
+    } catch {
+      toast({
+        title: copy("Download failed. Check the preview and try again."),
+        variant: "destructive",
+      });
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
+  const { t, i18n } = useTranslation();
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState(0);
   const [url, setUrl] = useState("");
-  const [qrValue, setQrValue] = useState("");
-  const [updateLater, setUpdateLater] = useState(false);
+
   const [trackAnalytics, setTrackAnalytics] = useState(false);
-  const [enableGPS, setEnableGPS] = useState(false);
+
   const [activeCustomTab, setActiveCustomTab] = useState("templates");
-  const [selectedTemplate, setSelectedTemplate] = useState(1);
-  const [email, setEmail] = useState("");
-  const [selectedLogo, setSelectedLogo] = useState<string | null>(null);
+
   const [downloadFormat, setDownloadFormat] = useState("png");
   const [isGenerating, setIsGenerating] = useState(false);
-  const [trackingShortCode, setTrackingShortCode] = useState<string | null>(null);
-  const [analyticsData, setAnalyticsData] = useState<any>(null);
+  const [analyticsData, setAnalyticsData] =
+    useState<QRAnalyticsResponse | null>(null);
   const [isLoadingAnalytics, setIsLoadingAnalytics] = useState(false);
   const [isAnalyticsOpen, setIsAnalyticsOpen] = useState(false);
   const templatesScrollRef = useRef<HTMLDivElement>(null);
+  const destination = normalizeDestination(url);
+  const qrValue = trackAnalytics
+    ? record?.tracking_enabled && record.destination_url === destination
+      ? getTrackingUrl(record.short_code)
+      : ""
+    : destination || "";
+  const trackingShortCode = record?.tracking_enabled ? record.short_code : null;
+  const snapshot = editorSnapshot(url, design, trackAnalytics, activeTab);
+  const dirty = ready && snapshot !== baseline;
 
-  // Custom Design State
-  const [customDotsType, setCustomDotsType] = useState<DotType>("square");
-  const [customCornersType, setCustomCornersType] = useState<CornerSquareType>("square");
-  const [customCornersDotType, setCustomCornersDotType] = useState<CornerDotType>("square");
-  const [customDotsColor, setCustomDotsColor] = useState<string>("#000000");
-  const [customCornersColor, setCustomCornersColor] = useState<string>("#000000");
-  const [customBgColor, setCustomBgColor] = useState<string>("#ffffff");
-
-  // Sync custom options when template changes
   useEffect(() => {
-    const template = templates.find(t => t.id === selectedTemplate) || templates[0];
-    setCustomDotsType(template.dotsOptions.type || "square");
-    setCustomCornersType(template.cornersSquareOptions?.type || "square");
-    setCustomCornersDotType(template.cornersDotOptions?.type || "square");
-    setCustomDotsColor(template.dotsOptions.color || "#000000");
-    setCustomCornersColor(template.cornersSquareOptions?.color || "#000000");
-    setCustomBgColor(template.backgroundOptions?.color || "#ffffff");
-  }, [selectedTemplate]);
+    if (!user?.id || blockedByDraft) return;
+    let cancelled = false;
+    loadedSource.current = undefined;
+    setReady(false);
+    setLoadError(false);
+    const restore = async () => {
+      const previous = draft.current;
+      if (previous?.ownerId === user.id && previous.editId === editId) {
+        setUrl(previous.url);
+        setDesign(previous.design);
+        setTrackAnalytics(previous.tracking);
+        setActiveTab(previous.tab);
+        setRecord(previous.record);
+        setBaseline(previous.baseline);
+      } else if (editId) {
+        try {
+          const result = await getQRCode(editId);
+          if (cancelled) return;
+          const row = result.qrCode,
+            restoredDesign = row.design ?? structuredClone(defaultDesign);
+          const tab = Math.max(
+            0,
+            tabs.findIndex((item) => item.labelKey === row.qr_type),
+          );
+          setRecord(row);
+          setUrl(row.destination_url);
+          setDesign(restoredDesign);
+          setTrackAnalytics(row.tracking_enabled);
+          setActiveTab(tab);
+          setBaseline(
+            editorSnapshot(
+              row.destination_url,
+              restoredDesign,
+              row.tracking_enabled,
+              tab,
+            ),
+          );
+        } catch {
+          if (!cancelled) setLoadError(true);
+        }
+      } else {
+        const initial = structuredClone(defaultDesign);
+        setRecord(null);
+        setUrl("");
+        setDesign(initial);
+        setTrackAnalytics(false);
+        setActiveTab(0);
+        setBaseline(editorSnapshot("", initial, false, 0));
+      }
+      if (!cancelled) {
+        loadedSource.current = editId;
+        setReady(true);
+      }
+    };
+    void restore();
+    return () => {
+      cancelled = true;
+    };
+  }, [editId, user?.id, draft, blockedByDraft]);
+
+  useEffect(() => {
+    if (
+      ready &&
+      loadedSource.current === editId &&
+      !loadError &&
+      user?.id &&
+      !blockedByDraft
+    )
+      updateDraft(
+        {
+          ownerId: user.id,
+          editId,
+          url,
+          design,
+          tracking: trackAnalytics,
+          tab: activeTab,
+          record,
+          baseline,
+        },
+        dirty,
+      );
+  }, [
+    ready,
+    loadError,
+    user?.id,
+    editId,
+    url,
+    design,
+    trackAnalytics,
+    activeTab,
+    record,
+    baseline,
+    dirty,
+    updateDraft,
+    blockedByDraft,
+  ]);
 
   // Fetch analytics when tracking code changes
   const fetchAnalytics = useCallback(async () => {
@@ -316,145 +326,110 @@ const QRGenerator = () => {
     }
   }, [trackingShortCode, fetchAnalytics]);
 
-  // Generate QR code value based on URL input
-  useEffect(() => {
-    if (!url.trim()) {
-      setQrValue("");
-      return;
-    }
-
-    let value = url.trim();
-
-    // Format based on tab type
-    if (activeTab === 0 || activeTab === 1 || activeTab === 5) {
-      value = url.startsWith("http://") || url.startsWith("https://")
-        ? url
-        : `https://${url}`;
-    }
-
-    // Only set qrValue directly if not using tracking
-    if (!trackAnalytics) {
-      setQrValue(value);
-    }
-  }, [url, activeTab, trackAnalytics]);
-
-  // Handle generating tracked QR code
-  const handleGenerateQR = async () => {
-    if (!url.trim()) {
+  const saveDesign = async () => {
+    const destinationUrl = normalizeDestination(url);
+    if (!destinationUrl || !validDesign) {
       toast({
-        title: "Erro",
-        description: "Por favor, insira uma URL",
+        title: copy("Enter a valid HTTP/HTTPS URL and contrasting colors."),
         variant: "destructive",
       });
       return;
     }
-
-    let destinationUrl = url.trim();
-    if (activeTab === 0 || activeTab === 1 || activeTab === 5) {
-      destinationUrl = url.startsWith("http://") || url.startsWith("https://")
-        ? url
-        : `https://${url}`;
+    if (!trackAnalytics && !previewRef.current?.querySelector("svg")) {
+      toast({
+        title: copy(
+          "Use a shorter URL and contrasting valid colors to generate this QR.",
+        ),
+        variant: "destructive",
+      });
+      return;
     }
-
-    if (trackAnalytics) {
-      setIsGenerating(true);
-      try {
-        const result = await createTrackedQRCode(
-          destinationUrl,
-          url,
-          tabs[activeTab]?.labelKey
+    setIsGenerating(true);
+    try {
+      const result = record
+        ? await saveQRCodeDesign(record.id, design)
+        : await saveNewQRCode(
+            destinationUrl,
+            url,
+            tabs[activeTab].labelKey,
+            design,
+            trackAnalytics,
+          );
+      setRecord(result.qrCode);
+      setUrl(result.qrCode.destination_url);
+      const savedSnapshot = editorSnapshot(
+        result.qrCode.destination_url,
+        design,
+        trackAnalytics,
+        activeTab,
+      );
+      setBaseline(savedSnapshot);
+      if (!record && user) {
+        updateDraft(
+          {
+            ownerId: user.id,
+            editId: result.qrCode.id,
+            url: result.qrCode.destination_url,
+            design,
+            tracking: trackAnalytics,
+            tab: activeTab,
+            record: result.qrCode,
+            baseline: savedSnapshot,
+          },
+          false,
         );
-
-        if (result) {
-          // Use a public scan URL that works from any QR scanner (no SPA route required)
-          setQrValue(result.trackingUrl);
-          setTrackingShortCode(result.shortCode);
-
-          toast({
-            title: "QR Code criado!",
-            description: "Seu QR Code com tracking está pronto. Cada scan será registrado.",
-          });
-        } else {
-          toast({
-            title: "Erro",
-            description: "Falha ao criar QR Code com tracking",
-            variant: "destructive",
-          });
-        }
-      } catch (error) {
-        console.error("Error creating tracked QR:", error);
-        toast({
-          title: "Erro",
-          description: "Erro ao criar QR Code",
-          variant: "destructive",
-        });
-      } finally {
-        setIsGenerating(false);
+        router.replace("/app?edit=" + encodeURIComponent(result.qrCode.id));
       }
-    } else {
-      setQrValue(destinationUrl);
-      setTrackingShortCode(null);
+      toast({ title: copy("QR design saved") });
+    } catch {
+      toast({
+        title: copy("Unable to create QR. Please try again."),
+        variant: "destructive",
+      });
+    } finally {
+      setIsGenerating(false);
     }
   };
-
-  const getTemplateConfig = () => {
-    return templates.find(t => t.id === selectedTemplate) || templates[0];
+  const handleGenerateQR = () => {
+    if (trackAnalytics && !record) void saveDesign();
   };
-
-  const getQRCodeProps = () => {
-    // Use custom design values directly
-    return {
-      dotsOptions: {
-        type: customDotsType,
-        color: customDotsColor,
-      },
-      backgroundOptions: {
-        color: customBgColor,
-      },
-      cornersSquareOptions: {
-        type: customCornersType,
-        color: customCornersColor,
-      },
-      cornersDotOptions: {
-        type: customCornersDotType,
-        color: customCornersColor,
-      },
-      image: selectedLogo ? getLogoUrl(selectedLogo) : undefined,
-      imageOptions: {
-        hideBackgroundDots: true,
-        imageSize: 0.4,
-        margin: 5
-      }
-    };
-  };
-
-  const getLogoUrl = (_logoId: string) => {
-    // We can't easily pass lucide icons to qr-code-styling image prop (it expects URL)
-    // For now we might skip the internal logo rendering via library for Lucide icons,
-    // and rely on overlay, OR if we had real image URLs.
-    // The previous implementation used an overlay div. We can keep that for Lucide icons.
-    return undefined;
-  };
-
 
   // Handle template carousel scroll
-  const scrollTemplates = (direction: 'left' | 'right') => {
+  const scrollTemplates = (direction: "left" | "right") => {
     if (templatesScrollRef.current) {
       const scrollAmount = 200;
       const currentScroll = templatesScrollRef.current.scrollLeft;
-      const newScroll = direction === 'left'
-        ? currentScroll - scrollAmount
-        : currentScroll + scrollAmount;
+      const newScroll =
+        direction === "left"
+          ? currentScroll - scrollAmount
+          : currentScroll + scrollAmount;
 
       templatesScrollRef.current.scrollTo({
         left: newScroll,
-        behavior: 'smooth'
+        behavior: "smooth",
       });
     }
   };
 
+  if (blockedByDraft) return <DraftNotice />;
+  if (!ready || loadedSource.current !== editId)
+    return (
+      <p role="status" className="text-center p-8">
+        {copy("Loading QR editor...")}
+      </p>
+    );
+  if (loadError)
+    return (
+      <p role="alert" className="text-center p-8">
+        {copy("Unable to open this QR. Return to My QR Codes and try again.")}
+      </p>
+    );
   return (
-    <div className="bg-card rounded-lg shadow-xl p-8 max-w-6xl mx-auto">
+    <fieldset
+      disabled={isGenerating}
+      aria-label={copy("QR editor")}
+      className="bg-card rounded-lg shadow-xl p-4 sm:p-8 max-w-6xl mx-auto w-full min-w-0"
+    >
       {/* Tab Navigation */}
       <div className="flex items-center gap-2 mb-6 overflow-x-auto pb-2">
         {tabs.map((tab, index) => {
@@ -463,10 +438,12 @@ const QRGenerator = () => {
             <button
               key={index}
               onClick={() => setActiveTab(index)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-md whitespace-nowrap transition-colors ${activeTab === index
-                ? "bg-primary/10 text-primary border border-primary"
-                : "bg-muted text-muted-foreground hover:bg-muted/80"
-                }`}
+              disabled={Boolean(record) || isGenerating}
+              className={`flex items-center gap-2 px-4 py-2 rounded-md whitespace-nowrap transition-colors ${
+                activeTab === index
+                  ? "bg-primary/10 text-primary border border-primary"
+                  : "bg-muted text-muted-foreground hover:bg-muted/80"
+              }`}
             >
               <Icon className="w-4 h-4" />
               <span className="text-sm font-medium">{t(tab.labelKey)}</span>
@@ -482,22 +459,31 @@ const QRGenerator = () => {
       {activeTab === 3 ? (
         <ContactCardEditor />
       ) : (
-        <div className="grid md:grid-cols-[1fr,auto] gap-8">
+        <div className="grid md:grid-cols-[minmax(0,1fr),280px] gap-8">
           {/* Left Column */}
-          <div className="space-y-6">
+          <div className="space-y-6 min-w-0">
             {/* URL Input */}
-            <div className="flex gap-3">
+            <div className="flex flex-col sm:flex-row gap-3">
               <Input
-                placeholder={
-                  activeTab === 0 ? t('qrGenerator.addUrl') :
-                    activeTab === 1 ? t('qrGenerator.addPdfUrl') :
-                      activeTab === 2 ? t('qrGenerator.addAppStoreUrl') :
-                        activeTab === 4 ? t('qrGenerator.enterLocation') :
-                          activeTab === 5 ? t('qrGenerator.addLinkpageUrl') :
-                            activeTab === 6 ? t('qrGenerator.addFormUrl') :
-                              t('qrGenerator.enterValue')
-                }
+                aria-label={copy("Destination URL")}
+                placeholder={copy(
+                  activeTab === 0
+                    ? t("qrGenerator.addUrl")
+                    : activeTab === 1
+                      ? t("qrGenerator.addPdfUrl")
+                      : activeTab === 2
+                        ? t("qrGenerator.addAppStoreUrl")
+                        : activeTab === 4
+                          ? t("qrGenerator.enterLocation")
+                          : activeTab === 5
+                            ? t("qrGenerator.addLinkpageUrl")
+                            : activeTab === 6
+                              ? t("qrGenerator.addFormUrl")
+                              : t("qrGenerator.enterValue"),
+                )}
                 value={url}
+                readOnly={Boolean(record)}
+                disabled={isGenerating}
                 onChange={(e) => setUrl(e.target.value)}
                 className="flex-1"
               />
@@ -505,67 +491,79 @@ const QRGenerator = () => {
                 size="lg"
                 className="px-8"
                 onClick={handleGenerateQR}
-                disabled={isGenerating || !url.trim()}
+                disabled={
+                  isGenerating ||
+                  !normalizeDestination(url) ||
+                  !validDesign ||
+                  Boolean(record)
+                }
               >
                 {isGenerating ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Gerando...
+                    {copy("Gerando...")}
                   </>
                 ) : (
-                  t('qrGenerator.generateQR')
+                  t("qrGenerator.generateQR")
                 )}
               </Button>
             </div>
 
             {/* Toggles */}
+            {url.trim() && !destination && (
+              <p role="alert" className="text-sm text-destructive">
+                {copy("Enter a valid HTTP/HTTPS URL and contrasting colors.")}
+              </p>
+            )}
             <div className="flex flex-wrap gap-6">
-              <div className="flex items-center gap-2">
-                <Switch checked={updateLater} onCheckedChange={setUpdateLater} />
-                <span className="text-sm font-medium">{t('qrGenerator.updateLater')}</span>
-              </div>
               <div className="flex items-center gap-2">
                 <Switch
                   checked={trackAnalytics}
-                  onCheckedChange={(checked) => {
-                    setTrackAnalytics(checked);
-                    // Reset QR value when toggling tracking
-                    if (!checked && url.trim()) {
-                      let value = url.trim();
-                      if (activeTab === 0 || activeTab === 1 || activeTab === 5) {
-                        value = url.startsWith("http://") || url.startsWith("https://")
-                          ? url
-                          : `https://${url}`;
-                      }
-                      setQrValue(value);
-                      setTrackingShortCode(null);
-                    }
-                  }}
+                  aria-label={t("qrGenerator.trackAnalytics")}
+                  disabled={Boolean(record) || isGenerating}
+                  onCheckedChange={setTrackAnalytics}
                 />
-                <span className="text-sm font-medium">{t('qrGenerator.trackAnalytics')}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Switch checked={enableGPS} onCheckedChange={setEnableGPS} />
-                <span className="text-sm font-medium">{t('qrGenerator.enableGPS')}</span>
+                <span className="text-sm font-medium">
+                  {t("qrGenerator.trackAnalytics")}
+                </span>
               </div>
             </div>
 
+            {record && (
+              <p className="text-sm text-muted-foreground">
+                {copy(
+                  "Editing saved design. Destination and tracking mode are read-only.",
+                )}
+              </p>
+            )}
+
             {/* Tracking Info & Analytics Section */}
             {trackingShortCode && (
-              <Collapsible open={isAnalyticsOpen} onOpenChange={setIsAnalyticsOpen}>
+              <Collapsible
+                open={isAnalyticsOpen}
+                onOpenChange={setIsAnalyticsOpen}
+              >
                 <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg overflow-hidden">
                   <CollapsibleTrigger asChild>
                     <button className="w-full p-3 flex items-center justify-between hover:bg-green-100 dark:hover:bg-green-900/30 transition-colors">
                       <div className="text-left">
                         <p className="text-sm text-green-700 dark:text-green-300 flex items-center gap-2">
                           <BarChart3 className="w-4 h-4" />
-                          QR Code com tracking ativo! Código: <span className="font-mono font-bold">{trackingShortCode}</span>
+                          {copy("QR Code com tracking ativo! Código:")}
+                          <span className="font-mono font-bold">
+                            {trackingShortCode}
+                          </span>
                         </p>
                         <p className="text-xs text-green-600 dark:text-green-400 mt-1">
-                          {analyticsData?.analytics?.totalScans || 0} scans registrados • Clique para ver analytics
+                          {analyticsData?.analytics?.totalScans || 0}{" "}
+                          {copy(
+                            "scans registrados • Clique para ver analytics",
+                          )}
                         </p>
                       </div>
-                      <ChevronDown className={`w-5 h-5 text-green-600 transition-transform ${isAnalyticsOpen ? 'rotate-180' : ''}`} />
+                      <ChevronDown
+                        className={`w-5 h-5 text-green-600 transition-transform ${isAnalyticsOpen ? "rotate-180" : ""}`}
+                      />
                     </button>
                   </CollapsibleTrigger>
 
@@ -580,8 +578,10 @@ const QRGenerator = () => {
                           disabled={isLoadingAnalytics}
                           className="text-xs"
                         >
-                          <RefreshCw className={`w-3 h-3 mr-1 ${isLoadingAnalytics ? 'animate-spin' : ''}`} />
-                          Atualizar
+                          <RefreshCw
+                            className={`w-3 h-3 mr-1 ${isLoadingAnalytics ? "animate-spin" : ""}`}
+                          />
+                          {copy("Atualizar")}
                         </Button>
                       </div>
 
@@ -594,20 +594,47 @@ const QRGenerator = () => {
                           {/* Stats Grid */}
                           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                             <div className="bg-white dark:bg-gray-800 rounded-lg p-3 text-center shadow-sm">
-                              <p className="text-2xl font-bold text-primary">{analyticsData.analytics.totalScans}</p>
-                              <p className="text-xs text-muted-foreground">Total Scans</p>
+                              <p className="text-2xl font-bold text-primary">
+                                {analyticsData.analytics.totalScans}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {copy("Total Scans")}
+                              </p>
                             </div>
                             <div className="bg-white dark:bg-gray-800 rounded-lg p-3 text-center shadow-sm">
-                              <p className="text-2xl font-bold text-primary">{analyticsData.analytics.uniqueCountries?.length || 0}</p>
-                              <p className="text-xs text-muted-foreground">Países</p>
+                              <p className="text-2xl font-bold text-primary">
+                                {analyticsData.analytics.uniqueCountries
+                                  ?.length || 0}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {copy("Países")}
+                              </p>
                             </div>
                             <div className="bg-white dark:bg-gray-800 rounded-lg p-3 text-center shadow-sm">
-                              <p className="text-2xl font-bold text-primary">{Object.keys(analyticsData.analytics.deviceBreakdown || {}).length}</p>
-                              <p className="text-xs text-muted-foreground">Dispositivos</p>
+                              <p className="text-2xl font-bold text-primary">
+                                {
+                                  Object.keys(
+                                    analyticsData.analytics.deviceBreakdown ||
+                                      {},
+                                  ).length
+                                }
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {copy("Dispositivos")}
+                              </p>
                             </div>
                             <div className="bg-white dark:bg-gray-800 rounded-lg p-3 text-center shadow-sm">
-                              <p className="text-2xl font-bold text-primary">{Object.keys(analyticsData.analytics.browserBreakdown || {}).length}</p>
-                              <p className="text-xs text-muted-foreground">Navegadores</p>
+                              <p className="text-2xl font-bold text-primary">
+                                {
+                                  Object.keys(
+                                    analyticsData.analytics.browserBreakdown ||
+                                      {},
+                                  ).length
+                                }
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {copy("Navegadores")}
+                              </p>
                             </div>
                           </div>
 
@@ -616,70 +643,109 @@ const QRGenerator = () => {
                             {/* Devices */}
                             <div className="bg-white dark:bg-gray-800 rounded-lg p-3 shadow-sm">
                               <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
-                                <Smartphone className="w-4 h-4" /> Dispositivos
+                                <Smartphone className="w-4 h-4" />{" "}
+                                {copy("Dispositivos")}
                               </h4>
-                              {Object.keys(analyticsData.analytics.deviceBreakdown || {}).length > 0 ? (
+                              {Object.keys(
+                                analyticsData.analytics.deviceBreakdown || {},
+                              ).length > 0 ? (
                                 <div className="space-y-2">
-                                  {Object.entries(analyticsData.analytics.deviceBreakdown).map(([device, count]: [string, any]) => (
-                                    <div key={device} className="flex items-center justify-between">
-                                      <span className="text-sm capitalize">{device}</span>
+                                  {Object.entries(
+                                    analyticsData.analytics.deviceBreakdown,
+                                  ).map(([device, count]) => (
+                                    <div
+                                      key={device}
+                                      className="flex items-center justify-between"
+                                    >
+                                      <span className="text-sm capitalize">
+                                        {copy(device)}
+                                      </span>
                                       <div className="flex items-center gap-2">
                                         <div className="w-20 h-2 bg-muted rounded-full overflow-hidden">
                                           <div
                                             className="h-full bg-primary rounded-full"
-                                            style={{ width: `${(count / analyticsData.analytics.totalScans) * 100}%` }}
+                                            style={{
+                                              width: `${(count / analyticsData.analytics.totalScans) * 100}%`,
+                                            }}
                                           />
                                         </div>
-                                        <span className="text-xs text-muted-foreground w-8">{count}</span>
+                                        <span className="text-xs text-muted-foreground w-8">
+                                          {count}
+                                        </span>
                                       </div>
                                     </div>
                                   ))}
                                 </div>
                               ) : (
-                                <p className="text-xs text-muted-foreground">Nenhum dado ainda</p>
+                                <p className="text-xs text-muted-foreground">
+                                  {copy("Nenhum dado ainda")}
+                                </p>
                               )}
                             </div>
 
                             {/* Browsers */}
                             <div className="bg-white dark:bg-gray-800 rounded-lg p-3 shadow-sm">
                               <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
-                                <Monitor className="w-4 h-4" /> Navegadores
+                                <Monitor className="w-4 h-4" />{" "}
+                                {copy("Navegadores")}
                               </h4>
-                              {Object.keys(analyticsData.analytics.browserBreakdown || {}).length > 0 ? (
+                              {Object.keys(
+                                analyticsData.analytics.browserBreakdown || {},
+                              ).length > 0 ? (
                                 <div className="space-y-2">
-                                  {Object.entries(analyticsData.analytics.browserBreakdown).map(([browser, count]: [string, any]) => (
-                                    <div key={browser} className="flex items-center justify-between">
-                                      <span className="text-sm capitalize">{browser}</span>
+                                  {Object.entries(
+                                    analyticsData.analytics.browserBreakdown,
+                                  ).map(([browser, count]: [string, any]) => (
+                                    <div
+                                      key={browser}
+                                      className="flex items-center justify-between"
+                                    >
+                                      <span className="text-sm capitalize">
+                                        {copy(browser)}
+                                      </span>
                                       <div className="flex items-center gap-2">
                                         <div className="w-20 h-2 bg-muted rounded-full overflow-hidden">
                                           <div
                                             className="h-full bg-blue-500 rounded-full"
-                                            style={{ width: `${(count / analyticsData.analytics.totalScans) * 100}%` }}
+                                            style={{
+                                              width: `${(count / analyticsData.analytics.totalScans) * 100}%`,
+                                            }}
                                           />
                                         </div>
-                                        <span className="text-xs text-muted-foreground w-8">{count}</span>
+                                        <span className="text-xs text-muted-foreground w-8">
+                                          {count}
+                                        </span>
                                       </div>
                                     </div>
                                   ))}
                                 </div>
                               ) : (
-                                <p className="text-xs text-muted-foreground">Nenhum dado ainda</p>
+                                <p className="text-xs text-muted-foreground">
+                                  {copy("Nenhum dado ainda")}
+                                </p>
                               )}
                             </div>
                           </div>
 
                           {/* Countries */}
-                          {analyticsData.analytics.uniqueCountries?.length > 0 && (
+                          {analyticsData.analytics.uniqueCountries?.length >
+                            0 && (
                             <div className="bg-white dark:bg-gray-800 rounded-lg p-3 shadow-sm">
                               <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
-                                <MapPinned className="w-4 h-4" /> Países
+                                <MapPinned className="w-4 h-4" />{" "}
+                                {copy("Países")}
                               </h4>
                               <div className="flex flex-wrap gap-2">
-                                {analyticsData.analytics.uniqueCountries.map((country: string) => (
-                                  <span key={country} className="px-2 py-1 bg-muted rounded-full text-xs">
-                                    {country}
-                                  </span>
-                                ))}
+                                {analyticsData.analytics.uniqueCountries.map(
+                                  (country: string) => (
+                                    <span
+                                      key={country}
+                                      className="px-2 py-1 bg-muted rounded-full text-xs"
+                                    >
+                                      {copy(country)}
+                                    </span>
+                                  ),
+                                )}
                               </div>
                             </div>
                           )}
@@ -688,31 +754,57 @@ const QRGenerator = () => {
                           {analyticsData.analytics.recentScans?.length > 0 && (
                             <div className="bg-white dark:bg-gray-800 rounded-lg p-3 shadow-sm">
                               <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
-                                <Clock className="w-4 h-4" /> Scans Recentes
+                                <Clock className="w-4 h-4" />{" "}
+                                {copy("Scans Recentes")}
                               </h4>
                               <div className="space-y-2 max-h-40 overflow-y-auto">
-                                {analyticsData.analytics.recentScans.map((scan: any, index: number) => (
-                                  <div key={scan.id || index} className="flex items-center justify-between text-xs border-b border-border pb-2 last:border-0">
-                                    <div className="flex items-center gap-2">
-                                      <span className="text-muted-foreground">
-                                        {new Date(scan.scanned_at).toLocaleString('pt-BR')}
-                                      </span>
+                                {analyticsData.analytics.recentScans.map(
+                                  (scan, index: number) => (
+                                    <div
+                                      key={scan.id || index}
+                                      className="flex items-center justify-between text-xs border-b border-border pb-2 last:border-0"
+                                    >
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-muted-foreground">
+                                          {new Date(
+                                            scan.scanned_at,
+                                          ).toLocaleString(
+                                            i18n.language === "ar"
+                                              ? "ar"
+                                              : "en",
+                                          )}
+                                        </span>
+                                      </div>
+                                      <div className="flex items-center gap-2 text-muted-foreground">
+                                        <span>
+                                          {copy(scan.device_type || "unknown")}
+                                        </span>
+                                        <span>•</span>
+                                        <span>
+                                          {copy(
+                                            scan.city ||
+                                              scan.country ||
+                                              "unknown",
+                                          )}
+                                        </span>
+                                      </div>
                                     </div>
-                                    <div className="flex items-center gap-2 text-muted-foreground">
-                                      <span>{scan.device_type || 'unknown'}</span>
-                                      <span>•</span>
-                                      <span>{scan.city || scan.country || 'unknown'}</span>
-                                    </div>
-                                  </div>
-                                ))}
+                                  ),
+                                )}
                               </div>
                             </div>
                           )}
                         </>
                       ) : (
                         <div className="text-center py-4">
-                          <p className="text-sm text-muted-foreground">Nenhum scan registrado ainda.</p>
-                          <p className="text-xs text-muted-foreground mt-1">Os dados aparecerão aqui quando alguém escanear o QR code.</p>
+                          <p className="text-sm text-muted-foreground">
+                            {copy("Nenhum scan registrado ainda.")}
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {copy(
+                              "Os dados aparecerão aqui quando alguém escanear o QR code.",
+                            )}
+                          </p>
                         </div>
                       )}
                     </div>
@@ -723,25 +815,44 @@ const QRGenerator = () => {
 
             {/* Customization Tabs */}
             <div className="border-t border-border pt-6">
-              <div className="flex gap-2 mb-4">
+              <div className="flex gap-2 mb-4 overflow-x-auto">
                 {[
-                  { id: "templates", icon: ImageIcon, labelKey: "qrGenerator.customization.templates" },
-                  { id: "logo", icon: ImageIcon, labelKey: "qrGenerator.customization.logo" },
-                  { id: "design", icon: Palette, labelKey: "qrGenerator.customization.design" },
-                  { id: "frame", icon: FrameIcon, labelKey: "qrGenerator.customization.frame" },
+                  {
+                    id: "templates",
+                    icon: ImageIcon,
+                    labelKey: "qrGenerator.customization.templates",
+                  },
+                  {
+                    id: "logo",
+                    icon: ImageIcon,
+                    labelKey: "qrGenerator.customization.logo",
+                  },
+                  {
+                    id: "design",
+                    icon: Palette,
+                    labelKey: "qrGenerator.customization.design",
+                  },
+                  {
+                    id: "frame",
+                    icon: FrameIcon,
+                    labelKey: "qrGenerator.customization.frame",
+                  },
                 ].map((tab) => {
                   const Icon = tab.icon;
                   return (
                     <button
                       key={tab.id}
                       onClick={() => setActiveCustomTab(tab.id)}
-                      className={`flex items-center gap-2 px-4 py-2 rounded-md transition-colors ${activeCustomTab === tab.id
-                        ? "bg-muted text-foreground"
-                        : "text-muted-foreground hover:bg-muted/50"
-                        }`}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-md transition-colors ${
+                        activeCustomTab === tab.id
+                          ? "bg-muted text-foreground"
+                          : "text-muted-foreground hover:bg-muted/50"
+                      }`}
                     >
                       <Icon className="w-4 h-4" />
-                      <span className="text-sm font-medium">{t(tab.labelKey)}</span>
+                      <span className="text-sm font-medium">
+                        {t(tab.labelKey)}
+                      </span>
                     </button>
                   );
                 })}
@@ -750,12 +861,14 @@ const QRGenerator = () => {
               {/* Templates Section */}
               {activeCustomTab === "templates" && (
                 <div>
-                  <h3 className="text-sm font-semibold mb-3">{t('qrGenerator.customization.selectFromTemplates')}</h3>
+                  <h3 className="text-sm font-semibold mb-3">
+                    {t("qrGenerator.customization.selectFromTemplates")}
+                  </h3>
                   <div className="flex items-center gap-3 w-full">
                     <button
-                      onClick={() => scrollTemplates('left')}
+                      onClick={() => scrollTemplates("left")}
                       className="p-1 hover:bg-muted rounded flex-shrink-0"
-                      aria-label="Scroll templates left"
+                      aria-label={copy("Scroll templates left")}
                     >
                       <ChevronLeft className="w-5 h-5" />
                     </button>
@@ -764,32 +877,34 @@ const QRGenerator = () => {
                       className="flex gap-3 overflow-x-auto scrollbar-hide flex-1 min-w-0 py-2 max-w-[528px]"
                     >
                       {templates.map((template) => (
-                        <div
+                        <button
+                          type="button"
+                          title={copy(template.name)}
+                          aria-label={copy(template.name)}
+                          aria-pressed={selectedTemplate === template.id}
                           key={template.id}
                           onClick={() => setSelectedTemplate(template.id)}
-                          className={`border-2 rounded-lg p-3 hover:border-primary cursor-pointer transition-colors flex-shrink-0 ${selectedTemplate === template.id
-                            ? "border-primary"
-                            : "border-border"
-                            }`}
+                          className={`border-2 rounded-lg p-3 hover:border-primary cursor-pointer transition-colors flex-shrink-0 ${
+                            selectedTemplate === template.id
+                              ? "border-primary"
+                              : "border-border"
+                          }`}
                         >
-                          <div className={`w-16 h-16 flex items-center justify-center overflow-hidden ${template.containerClassName ? template.containerClassName.replace("border-4", "border-2") : "rounded"}`}>
+                          <div className="w-16 h-16 flex items-center justify-center">
                             <QRCodeStyled
                               data="https://example.com"
                               width={64}
                               height={64}
-                              dotsOptions={template.dotsOptions}
-                              backgroundOptions={template.backgroundOptions}
-                              cornersSquareOptions={template.cornersSquareOptions}
-                              cornersDotOptions={template.cornersDotOptions}
+                              design={template.design}
                             />
                           </div>
-                        </div>
+                        </button>
                       ))}
                     </div>
                     <button
-                      onClick={() => scrollTemplates('right')}
+                      onClick={() => scrollTemplates("right")}
                       className="p-1 hover:bg-muted rounded flex-shrink-0"
-                      aria-label="Scroll templates right"
+                      aria-label={copy("Scroll templates right")}
                     >
                       <ChevronRight className="w-5 h-5" />
                     </button>
@@ -801,20 +916,24 @@ const QRGenerator = () => {
               {/* Logo Section */}
               {activeCustomTab === "logo" && (
                 <div className="space-y-4">
-                  <h3 className="text-sm font-semibold">{t('qrGenerator.customization.selectLogo') || 'Select Logo'}</h3>
+                  <h3 className="text-sm font-semibold">
+                    {copy("Select Logo")}
+                  </h3>
                   <div className="grid grid-cols-7 sm:grid-cols-10 md:grid-cols-14 gap-2">
                     {logos.map((logo) => {
                       const isSelected = selectedLogo === logo.id;
                       return (
                         <button
                           key={logo.id}
-                          onClick={() => setSelectedLogo(isSelected ? null : logo.id)}
+                          onClick={() =>
+                            setSelectedLogo(isSelected ? null : logo.id)
+                          }
                           className={`w-9 h-9 rounded-lg flex items-center justify-center transition-all hover:scale-105 ${
                             isSelected
                               ? "ring-2 ring-primary ring-offset-2"
                               : "hover:bg-muted"
                           }`}
-                          title={logo.label}
+                          title={copy(logo.label)}
                         >
                           {logo.icon ? (
                             <logo.icon
@@ -833,20 +952,12 @@ const QRGenerator = () => {
                     })}
                   </div>
 
-                  <div className="pt-4 border-t border-border">
-                    <p className="text-sm text-muted-foreground mb-3">OR</p>
-                    <div className="flex items-center justify-between">
-                      <Button variant="outline" size="sm">
-                        Upload Logo
-                      </Button>
-                      <button
-                        onClick={() => setSelectedLogo(null)}
-                        className="text-sm text-primary hover:underline"
-                      >
-                        Reset to Default
-                      </button>
-                    </div>
-                  </div>
+                  <button
+                    onClick={() => setSelectedLogo(null)}
+                    className="text-sm text-primary hover:underline"
+                  >
+                    {copy("Remove logo")}
+                  </button>
                 </div>
               )}
 
@@ -867,127 +978,144 @@ const QRGenerator = () => {
                 />
               )}
 
+              {activeCustomTab === "frame" && (
+                <div className="space-y-4">
+                  <label className="text-sm font-medium" htmlFor="qr-frame">
+                    {copy("Frame style")}
+                  </label>
+                  <select
+                    id="qr-frame"
+                    className="w-full rounded-md border border-border bg-background p-2"
+                    value={design.frame.style}
+                    onChange={(event) =>
+                      setDesign((previous) => ({
+                        ...previous,
+                        frame: {
+                          ...previous.frame,
+                          style: qrDesignSchema.shape.frame.shape.style.parse(
+                            event.target.value,
+                          ),
+                        },
+                      }))
+                    }
+                  >
+                    {frameStyles.map((style) => (
+                      <option key={style} value={style}>
+                        {copy(style)}
+                      </option>
+                    ))}
+                  </select>
+                  {!design.frame.style.startsWith("circle-") &&
+                    design.frame.style !== "none" && (
+                      <>
+                        <label
+                          htmlFor="qr-frame-text"
+                          className="text-sm font-medium"
+                        >
+                          {copy("Frame text")}
+                        </label>
+                        <Input
+                          id="qr-frame-text"
+                          maxLength={40}
+                          value={design.frame.text}
+                          onChange={(event) =>
+                            setDesign((previous) => ({
+                              ...previous,
+                              frame: {
+                                ...previous.frame,
+                                text: event.target.value,
+                              },
+                            }))
+                          }
+                        />
+                      </>
+                    )}
+                </div>
+              )}
             </div>
           </div>
 
-          {/* Right Column - QR Preview */}
           <div className="flex flex-col items-center gap-4 md:min-w-[280px]">
-            <div className="border-2 border-border rounded-lg p-4 bg-background">
-              <div className="w-48 h-48 bg-white flex items-center justify-center relative rounded">
-                {qrValue ? (
-                  <>
-                    {/* Frame/Footer Renderer */}
-                    {(() => {
-                      const template = getTemplateConfig();
-                      if (template.frame) {
-                        return (
-                          <div className="flex flex-col items-center">
-                            <div className={`p-4 bg-white rounded-lg ${template.frame.style === 'blue' ? 'border-4 border-blue-900' : 'border-2 border-dashed border-gray-300'}`}>
-                              <QRCodeStyled
-                                data={qrValue}
-                                width={192}
-                                height={192}
-                                {...getQRCodeProps()}
-                              />
-                            </div>
-                            {template.frame.text && (
-                              <div className={`mt-2 px-4 py-1 rounded-full text-sm font-bold text-white ${template.frame.style === 'red' ? 'bg-red-600' :
-                                template.frame.style === 'blue' ? 'bg-blue-900' : 'bg-black'
-                                }`}>
-                                {template.frame.text}
-                              </div>
-                            )}
-                          </div>
-                        );
-                      }
-
-                      return (
-                        <div className={template.containerClassName || ""}>
-                          <QRCodeStyled
-                            data={qrValue}
-                            width={192}
-                            height={192}
-                            {...getQRCodeProps()}
-                          />
-                        </div>
-                      );
-                    })()}
-
-                    {/* Logo Overlay in Center */}
-                    {selectedLogo && !getTemplateConfig().imageOptions && (
-                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                        <div className="bg-white rounded p-1 shadow">
-                          {(() => {
-                            const selectedLogoData = logos.find(l => l.id === selectedLogo);
-                            if (!selectedLogoData) return null;
-
-                            if (selectedLogoData.icon) {
-                              const LogoIcon = selectedLogoData.icon;
-                              return (
-                                <LogoIcon
-                                  className="w-5 h-5"
-                                  style={{ color: selectedLogoData.color }}
-                                />
-                              );
-                            }
-
-                            if (selectedLogoData.svg) {
-                              return (
-                                <div
-                                  className="w-5 h-5"
-                                  style={{ color: selectedLogoData.color }}
-                                  dangerouslySetInnerHTML={{ __html: selectedLogoData.svg }}
-                                />
-                              );
-                            }
-
-                            return null;
-                          })()}
-                        </div>
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <div className="text-muted-foreground text-sm text-center p-4">
-                    {t('qrGenerator.enterUrlToGenerate')}
-                  </div>
-                )}
-              </div>
+            <div
+              ref={previewRef}
+              className="border-2 border-border rounded-lg p-4 bg-background"
+              aria-label={copy("QR preview")}
+            >
+              {qrValue ? (
+                <QRCodeStyled data={qrValue} design={design} width={192} />
+              ) : (
+                <div className="w-48 min-h-48 grid place-items-center text-muted-foreground text-sm text-center p-4">
+                  {t("qrGenerator.enterUrlToGenerate")}
+                </div>
+              )}
             </div>
-
-            <Input
-              placeholder={t('qrGenerator.enterEmail')}
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full"
-            />
-
-            <Button size="lg" className="w-full">
-              {t('qrGenerator.signUpToSave')}
-            </Button>
-
-            <p className="text-xs text-muted-foreground text-center">{t('qrGenerator.noCreditCardRequired')}</p>
-
+            {!validDesign && (
+              <p role="alert" className="max-w-64 text-sm text-destructive">
+                {copy("Use valid colors with enough contrast.")}
+              </p>
+            )}
+            {trackAnalytics && !qrValue && (
+              <p className="max-w-64 text-sm text-muted-foreground">
+                {copy(
+                  "Generate again after changing the destination or tracking mode.",
+                )}
+              </p>
+            )}
             <div className="w-full">
-              <label className="text-sm font-medium mb-2 block">{t('qrGenerator.downloadFormat')}</label>
+              <label
+                htmlFor="qr-format"
+                className="text-sm font-medium mb-2 block"
+              >
+                {t("qrGenerator.downloadFormat")}
+              </label>
               <Select value={downloadFormat} onValueChange={setDownloadFormat}>
-                <SelectTrigger>
+                <SelectTrigger id="qr-format">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="png">PNG</SelectItem>
-                  <SelectItem value="svg">SVG</SelectItem>
-                  <SelectItem value="pdf">PDF</SelectItem>
-                  <SelectItem value="eps">EPS</SelectItem>
+                  <SelectItem value="png">{copy("PNG")}</SelectItem>
+                  <SelectItem value="svg">{copy("SVG")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
+            <Button
+              size="lg"
+              className="w-full"
+              onClick={exportQR}
+              disabled={
+                !qrValue || !validDesign || isGenerating || isDownloading
+              }
+            >
+              {isDownloading ? copy("Downloading...") : copy("Download QR")}
+            </Button>
+            <Button
+              size="lg"
+              variant="outline"
+              className="w-full"
+              onClick={saveDesign}
+              disabled={
+                isGenerating ||
+                !destination ||
+                !validDesign ||
+                (Boolean(record) && !dirty)
+              }
+            >
+              {isGenerating ? copy("Saving...") : copy("Save QR design")}
+            </Button>
+            <p
+              role="status"
+              className="max-w-64 text-xs text-muted-foreground text-center"
+            >
+              {dirty
+                ? copy("Unsaved changes")
+                : record
+                  ? copy("All changes saved")
+                  : copy("Choose a destination and customize your QR.")}
+            </p>
           </div>
         </div>
       )}
-    </div>
+    </fieldset>
   );
 };
-
 export default QRGenerator;

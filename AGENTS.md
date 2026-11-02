@@ -13,8 +13,22 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Each lot belongs to one feature branch created from the updated `main` of `daviduartedev/yousef-qrcode`.
 - The lot workflow is specification → tickets → implementation → code review → dvd-tests → human validation → commit/push. Do not commit, push implementation, open a PR or merge until the human has completed the requested validation.
 - The initial empty main commit contains no imported application history. Do not import the old repository's Git history or environment files.
-- Treat `docs/lotes/01-nextjs-postgres/spec.md` and GitHub issues #1–#4 as the scope of this lot. Editor fixes and new reference modules belong to later lots.
+- The integrated Lote 1 is documented in `docs/lotes/01-nextjs-postgres/spec.md`. The current Lote 2 scope is `docs/lotes/02-editor-qrcode/spec.md` and GitHub issues #6–#9; R3 and later reference modules remain out of scope.
 - Database, auth and private environment access belong to modules marked `server-only`. Derive resource ownership from the server session.
 - Never print secrets or place credentials in public environment variables, Git, issues, logs, screenshots or manual validation instructions. Only dummy configuration examples may be versioned.
 - Run credential checks before staging/reviewing files; preserve the local Git hooks and the CI checks.
 - Tests verify behavior through HTTP and Git/CLI boundaries, using disposable local data. Browser credentials require user authorization; do not create default login profiles.
+
+## Agent skills
+
+### Issue tracker
+
+Issues and specs live in GitHub Issues for `daviduartedev/yousef-qrcode`, operated through `gh`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Use the five canonical triage labels without aliases. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: root `GLOSSARY.md` and `docs/adr/`, read when present. See `docs/agents/domain.md`.

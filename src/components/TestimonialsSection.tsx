@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { useEffect, useState, useRef } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
@@ -34,6 +35,7 @@ const testimonials: Testimonial[] = [
 ];
 
 export const TestimonialsSection = () => {
+  const { t: copy } = useTranslation('copy');
   const [isVisible, setIsVisible] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
   const sectionRef = useRef<HTMLDivElement>(null);
@@ -73,11 +75,9 @@ export const TestimonialsSection = () => {
           }`}
         >
           <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-foreground mb-4">
-            Loved by Thousands of Teams
-          </h2>
+            {copy("Loved by Thousands of Teams")}</h2>
           <p className="text-muted-foreground text-lg">
-            See what our customers have to say
-          </p>
+            {copy("See what our customers have to say")}</p>
         </div>
 
         {/* Testimonials Carousel */}
@@ -112,18 +112,18 @@ export const TestimonialsSection = () => {
                 {/* Avatar and Info */}
                 <div className="flex items-center gap-3 mb-4">
                   <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold">
-                    {testimonial.avatar}
+                    {copy(testimonial.avatar)}
                   </div>
                   <div>
-                    <h4 className="font-semibold text-foreground text-sm">{testimonial.name}</h4>
-                    <p className="text-xs text-muted-foreground">{testimonial.role}</p>
-                    <p className="text-xs text-primary">{testimonial.company}</p>
+                    <h4 className="font-semibold text-foreground text-sm">{copy(testimonial.name)}</h4>
+                    <p className="text-xs text-muted-foreground">{copy(testimonial.role)}</p>
+                    <p className="text-xs text-primary">{copy(testimonial.company)}</p>
                   </div>
                 </div>
 
                 {/* Quote */}
                 <p className="text-muted-foreground text-sm italic leading-relaxed">
-                  {testimonial.content}
+                  {copy(testimonial.content)}
                 </p>
               </div>
             ))}
