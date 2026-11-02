@@ -1,0 +1,137 @@
+{
+  "header": {
+    "logo": "UNIQODE",
+    "qrCodes": "QR Codes",
+    "digitalBusinessCards": "Digital Business Cards",
+    "solution": "Solution",
+    "learn": "Learn",
+    "pricing": "Pricing",
+    "demo": "Demo",
+    "startFreeTrial": "Start Free Trial",
+    "login": "Login"
+  },
+  "hero": {
+    "title": "Create Trackable QR Codes with Analytics",
+    "description": "Unlock real-time insights into when, where and how your QR Codes are scanned and integrate with Google Analytics (GA4) to optimize your campaigns"
+  },
+  "qrGenerator": {
+    "tabs": {
+      "website": "Website",
+      "pdf": "Pdf",
+      "appDownloads": "App Downloads",
+      "contactCard": "Contact Card",
+      "location": "Location",
+      "linkpage": "Linkpage",
+      "form": "Form",
+      "me": "Me"
+    },
+    "addUrl": "Add URL",
+    "addPdfUrl": "Add PDF URL",
+    "addAppStoreUrl": "Add App Store URL",
+    "enterContactName": "Enter contact name",
+    "enterLocation": "Enter location",
+    "addLinkpageUrl": "Add Linkpage URL",
+    "addFormUrl": "Add Form URL",
+    "enterValue": "Enter value",
+    "generateQR": "Generate QR",
+    "updateLater": "Update Later",
+    "trackAnalytics": "Track Analytics",
+    "enableGPS": "Enable GPS",
+    "customization": {
+      "templates": "Templates",
+      "logo": "Logo",
+      "design": "Design",
+      "frame": "Frame",
+      "selectFromTemplates": "Select From Templates"
+    },
+    "enterUrlToGenerate": "Enter URL to generate QR code",
+    "enterEmail": "Enter your email address",
+    "signUpToSave": "Sign Up to Save",
+    "noCreditCardRequired": "No credit card required",
+    "downloadFormat": "Download Format"
+  },
+  "trackingInfo": {
+    "title": "What is QR Code Tracking?",
+    "description": "QR Code tracking is the process of collecting and analyzing data about how people interact with your QR Codes. Only dynamic QR Codes support tracking capabilities – recording who scans, when they scan, where they're located, and what devices they use. Static QR Codes embed data directly and cannot collect analytics, while dynamic codes redirect through trackable URLs that log each interaction."
+  },
+  "dataTracking": {
+    "title": "What data can you track from a QR Code?",
+    "items": {
+      "scans": "Number of scans",
+      "timeOfDay": "Scan by time of day",
+      "location": "Location (country, city, GPS)",
+      "device": "Device operating system",
+      "performance": "QR Code performance (campaigns)"
+    }
+  },
+  "howToCreate": {
+    "title": "How to create and track a QR Code?",
+    "description": "Sign up with Uniqode's free trial to create a free QR Code. Next, login to our dashboard and follow these steps:"
+  },
+  "ga4": {
+    "title": "How to track QR Codes in Google Analytics (GA4)?",
+    "description1": "Learn how to integrate a third-party UTM parameter-powered link created UTM parameters in the destination URL, and get deeper insights. All parameters will then be visible in Google Analytics.",
+    "description2": "Combine your UTM's power with UTM parameter scanning and destination links."
+  },
+  "benefits": {
+    "title": "Benefits of trackable QR Codes",
+    "description": "Turn every scan into insights, leads, and ROI with secure, trackable QR Codes",
+    "cta": "Get Started Now"
+  },
+  "secureBanner": {
+    "title": "Stay secure, on-brand and in control across\nyour QR Code experience",
+    "description": "Unlock a goldmine of first-party data with every QR scan. Discover who your audience is, where they're engaging, when they're active, and what drives them—all in real time.",
+    "learnMore": "Learn More"
+  },
+  "roi": {
+    "title": "How QR Code tracking drives ROI",
+    "description": "Transform offline engagement into measurable success with Uniqode's QR tracking. Here's how to unlock revenue potential."
+  },
+  "analyticsIntegration": {
+    "title": "Enhance QR tracking\nwith Analytics\nIntegration",
+    "description": "Bring your QR Code scan insights into your existing tools. Track, analyze, and act without disrupting your current workflow."
+  },
+  "trustedBy": "Trusted by businesses you ⭐",
+  "viewPricing": "View Pricing",
+  "landing": {
+    "hero": {
+      "title": "Create Trackable QR Codes with Analytics",
+      "description": "Unlock real-time insights into when, where and how your QR Codes are scanned. Integrate with Google Analytics (GA4) and transform every scan into actionable data.",
+      "ctaPrimary": "Get Started Free",
+      "ctaSecondary": "View Demo"
+    },
+    "features": {
+      "title": "Powerful Features for Your Business",
+      "description": "Everything you need to create, track, and optimize your QR Code campaigns",
+      "qrCodes": {
+        "title": "Dynamic QR Codes",
+        "description": "Create unlimited trackable QR Codes for websites, PDFs, apps, and more. Update content anytime without reprinting."
+      },
+      "analytics": {
+        "title": "Advanced Analytics",
+        "description": "Track scans in real-time with detailed insights on location, device, time, and user behavior patterns."
+      },
+      "security": {
+        "title": "Secure & Reliable",
+        "description": "Enterprise-grade security with first-party data collection. Stay compliant and protect your brand."
+      },
+      "realTime": {
+        "title": "Real-Time Tracking",
+        "description": "Monitor your QR Code performance instantly. Get notified of every scan as it happens."
+      },
+      "integration": {
+        "title": "GA4 Integration",
+        "description": "Seamlessly integrate with Google Analytics 4. Track QR scans alongside your other marketing channels."
+      },
+      "roi": {
+        "title": "Drive ROI",
+        "description": "Transform offline engagement into measurable success. Track conversions and optimize your campaigns."
+      }
+    },
+    "cta": {
+      "title": "Ready to Get Started?",
+      "description": "Join thousands of businesses using Uniqode to track and optimize their QR Code campaigns.",
+      "button": "Create Your First QR Code"
+    }
+  }
+}
