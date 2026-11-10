@@ -2,6 +2,8 @@
 
 O editor do Lote 2 é validado localmente. Isto não conclui a primeira publicação do R2. Em 02/11/2026 não há novo Supabase configurado, exportação dos dados reais, ponte implantada no endereço antigo ou publicação autorizada deste lote.
 
+**Atualização de escopo em 02/11/2026:** o proprietário escolheu começar do zero. O [Lote 3 — publicação inicial com banco novo](../03-transicao-operacional/README.md) é a referência vigente: sem importação de usuários/QRs/scans, compatibilidade de hashes, delta legado ou ponte. A continuidade dos QRs dependentes do serviço antigo foi dispensada, sem desligá-lo nesta preparação. As instruções abaixo preservam o procedimento histórico do Lote 2; os passos de legado foram substituídos por essa decisão e não devem ser executados como pré-requisitos atuais. Recuperação do banco novo e retorno com preservação de gravações novas continuam obrigatórios. Não repetir a validação local nem interpretar aprovação de escopo como publicação executada.
+
 ## Ensaio antes de publicar
 
 1. O proprietário prepara o novo Postgres e configura a conexão, segredo de sessão e origem pública na configuração privada, conforme o README. Não enviar valores por chat, issues ou Git.

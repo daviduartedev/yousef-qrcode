@@ -19,8 +19,12 @@ A validação humana local deste lote foi concluída em 02/11/2026. Cada lote se
 - Inglês/árabe, RTL e retorno compartilhados; preview e PNG/SVG usam o mesmo design, logo e moldura.
 - Design versionado e modo direto/rastreável persistidos. Reabertura altera somente a aparência e preserva destino, identidade e scans. Códigos sem design usam Classic sem alegar recuperar a aparência original.
 - Sem upload de logo próprio, GPS, Update Later ou formatos de exportação sem implementação.
-- [Preparação de publicação e retorno](docs/lotes/02-editor-qrcode/publicacao.md). Novo Supabase, importação real e ponte antiga continuam pendentes; este lote não os declara concluídos.
-- A validação humana local do Lote 2 foi concluída em 02/11/2026. Importação de dados reais, compatibilidade no serviço antigo e implantação em produção continuam sujeitas às etapas documentadas de publicação.
+- [Preparação de publicação e retorno](docs/lotes/02-editor-qrcode/publicacao.md): registra o plano ao encerrar o Lote 2. Posteriormente, o proprietário dispensou importação/compatibilidade antiga no Lote 3.
+- A validação humana local do Lote 2 foi concluída em 02/11/2026. Homologação e publicação continuam pendentes no novo ambiente; dados e QRs antigos não serão migrados.
+
+## Lote 3 — publicação inicial com banco novo
+
+Preparação na branch `feat/lote-3-transicao-operacional`, aberta de main em `ba13e603`. O proprietário confirmou começar do zero em 02/11/2026: sem usuários, QRs ou histórico antigos e sem ponte. [Escopo/tickets](docs/lotes/03-transicao-operacional/README.md), [especificação](docs/lotes/03-transicao-operacional/spec.md) e [acessos/decisões](docs/lotes/03-transicao-operacional/acessos-e-decisoes.md) cobrem novo ambiente, backup/restauração, homologação com novas contas, publicação e retorno. Sequência ativa: #12 → #13 → #15; #14 retirado. R3 não foi iniciado. Aprovação do escopo não substitui validação humana antes de commit/push nem gates de produção. Nenhuma operação externa foi comprovada nesta preparação.
 
 ## Desenvolvimento local
 
@@ -84,7 +88,7 @@ Novos destinos rastreáveis aceitam HTTP/HTTPS sem credenciais embutidas. A cria
 
 ### QR Codes antigos
 
-Um código impresso que aponta ao endereço da função Supabase original continuará apontando para ele. Para preservá-lo, exporte/importе os registros e mantenha uma ponte naquele endereço, encaminhando os mesmos short codes à nova rota pública. Esta implementação **não alterou nem desligou o projeto antigo** e não importou dados reais. Usuários e registros exigem uma migração acompanhada, com IDs preservados ou mapeados e validação dos hashes de senha. Enquanto não houver exportações e acesso ao serviço antigo, essa transição permanece pendente.
+Um QR impresso com a URL Supabase original continua apontando para ela. Em 02/11/2026, o proprietário escolheu começar do zero e dispensou migração e ponte, aceitando que QRs dependentes do serviço antigo parem quando ele for desligado. Novos usuários criam contas e novos QRs usam a origem definitiva da aplicação. Esta preparação não apagou nem desligou o projeto antigo; sua continuidade não bloqueia o Lote 3.
 
 ### Escopo preservado
 
@@ -93,6 +97,10 @@ O Lote 1 preservou o editor e seus limites conhecidos. O Lote 2 conecta PNG/SVG 
 Linkpages publicadas, cartões publicados, formulários, cobrança, integrações e novos dashboards não fazem parte desta migração.
 
 ## Verificações
+
+Os comandos de [operação do banco novo](docs/lotes/03-transicao-operacional/operacao.md) inspecionam/preparam um destino identificado e fazem backup/restauração privada em outro banco vazio, sem importar legado. `npm run test:ops` ensaia o procedimento em bancos locais descartáveis, incluindo recusa de alvo errado, dados existentes e arquivo alterado. Novo Supabase, homologação e publicação continuam pendentes de configuração externa.
+
+Hospedagem escolhida: [Supabase + Vercel](docs/lotes/03-transicao-operacional/vercel.md), inicialmente em origem estável `vercel.app`, sem domínio próprio definido. Nenhum projeto remoto foi provisionado nesta execução.
 
 ```sh
 npm run check:secrets

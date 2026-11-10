@@ -19,8 +19,13 @@
     "db:up": "docker compose --env-file .env.local up -d",
     "db:migrate": "tsx scripts/migrate.ts",
     "db:generate": "drizzle-kit generate",
+    "db:inspect": "node scripts/database-ops.mjs inspect",
+    "db:prepare": "node scripts/database-ops.mjs prepare",
+    "db:backup": "node scripts/database-ops.mjs backup",
+    "db:restore": "node scripts/database-ops.mjs restore",
+    "test:ops": "node --test tests/database-ops.test.mjs",
     "test:api": "node scripts/test-api.mjs",
-    "test": "npm run test:security && npm run test:api"
+    "test": "npm run test:security && npm run test:ops && npm run test:api"
   },
   "dependencies": {
     "@better-auth/drizzle-adapter": "1.7.15",
