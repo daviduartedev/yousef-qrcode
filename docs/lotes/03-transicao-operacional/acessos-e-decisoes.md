@@ -2,6 +2,10 @@
 
 Registro em 02/11/2026. Pendente significa sem prontidão/execução comprovada; não presumir inexistência fora desta conversa. Guardar valores e evidências identificáveis apenas em canal privado.
 
+Em 10/11/2026, o proprietário escolheu Neon Free para o PostgreSQL de homologação e do ensaio de restauração. A decisão substitui a escolha anterior de Supabase para esses dois alvos. O cliente definirá o provedor e o operador de produção. Better Auth continua no aplicativo. A Vercel segue como opção prevista para hospedar o aplicativo de homologação, com projeto e origem ainda por confirmar. Ver [preparação dos bancos Neon](operacao.md#homologação-e-restauração-no-neon).
+
+O projeto Neon de homologação `yousef-hml` foi vinculado à branch Neon chamada `production`. O banco PostgreSQL 18 estava vazio e recebeu as migrations do Drizzle. O destino de restauração e a hospedagem do aplicativo seguem pendentes.
+
 ## Decisões estabelecidas
 
 - Main em `ba13e603`, Lotes 1/2 validados, PR #10 MERGED; pais #1/#6 abertos. Preservar interface, inglês/árabe/RTL, skills e proteções.
@@ -14,12 +18,12 @@ Registro em 02/11/2026. Pendente significa sem prontidão/execução comprovada;
 
 ## Acessos ao novo ambiente
 
-Responsáveis são papéis a atribuir. O proprietário prepara o novo Supabase; demais atribuições/prontidão precisam de confirmação. Informar apenas estado e referências sanitizadas, sem conexão, token, senha, hash ou cookie no chat/GitHub.
+Responsáveis são papéis a atribuir. O proprietário confirma a conta Neon de homologação e o acesso do operador; o cliente confirma a operação de produção. Informar apenas estado e referências sanitizadas, sem conexão, token, senha, hash ou cookie no chat/GitHub.
 
 | ID | Recurso | Estado | Próximo passo | Fatia |
 |---|---|---|---|---|
 | A2 | Backup/recuperação novos — operador | Ensaio local passou; recuperação hospedada e guarda externa não comprovadas | Definir guarda privada/retencão e comprovar schema/migrations/configuração no alvo remoto separado | 3.1 |
-| A3 | Novo Supabase — proprietário | Pode criar; projeto pronto não confirmado | Destinos separados de homologação/produção, TLS e permissão de migrations; schema privado fora da Data API | 3.1–3.2 |
+| A3 | PostgreSQL — proprietário e cliente | Homologação inicializada no Neon; restauração e produção pendentes | Confirmar destino de restauração isolado com PostgreSQL 18 e banco de produção separado sob gestão do cliente | 3.1–3.2 |
 | A4 | Vercel — operador | Provedor escolhido; conta/time/projeto e acesso não confirmados | Homologação e produção separadas, configuração privada, HTTPS, logs sanitizados e artefatos de retorno | 3.1–3.4 |
 | A5 | Novas contas de homologação — responsável pelos testes | Sem perfis permanentes definidos | Duas contas autorizadas isoladas, sem senha padrão, sem copiar legado nem levar fixtures a produção | 3.2 |
 | A7 | Origem Vercel/TLS — proprietário | Sem domínio próprio; origem estável `vercel.app` ainda não alocada | Confirmar URL efetiva e `APP_URL` de cada ambiente antes de distribuir QRs; domínio próprio pode ser decidido depois | 3.2–3.4 |
@@ -49,7 +53,7 @@ D2–D5 (hashes/provedores antigos, órfãos/mapeamentos, campos legados e conta
 | G4 — prontidão de publicação | Homologação aprovada, retorno ensaiado com gravações posteriores, alvo de produção sem legado/fixtures confirmado, observabilidade e responsáveis definidos, código revisado/validado pelo humano | Pendente de G2, A9 e D7–D9 |
 | G5 — produção acompanhada | Versão no domínio final, novas contas/QRs funcionando, scans/falhas observados pelo período acordado; sem requisito de URLs antigas | Pendente de G4 e publicação |
 
-Nenhum gate aplicável foi concluído. Os comandos de preparação/backup/restauração foram implementados e ensaiados em bancos locais descartáveis, com dados sintéticos e destino separado. Não houve provisionamento ou restauração remota nem deploy. Guarda/retenção de backups, novo Supabase e decisões da operação permanecem pendentes.
+Nenhum gate aplicável foi concluído. Os comandos de preparação/backup/restauração foram ensaiados em bancos locais descartáveis, com dados sintéticos e destino separado. O banco Neon de homologação está inicializado. Guarda e retenção de backups, restauração hospedada, implantação do aplicativo e operação de produção permanecem pendentes.
 
 ## Evidências privadas
 

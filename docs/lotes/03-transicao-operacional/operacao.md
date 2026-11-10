@@ -1,6 +1,13 @@
 # Operação do banco novo
 
-O proprietário escolheu início do zero. Estes comandos não importam o legado e não apagam bancos, schemas ou registros existentes. Usar somente alvos identificados e isolados. A implantação hospedada ainda depende do novo Supabase, hospedagem e domínio; o ensaio local não conclui esses gates.
+O proprietário escolheu início do zero. Estes comandos não importam o legado e não apagam bancos, schemas ou registros existentes. Usar somente alvos identificados e isolados. O ensaio local não conclui os gates hospedados.
+
+## Homologação e restauração no Neon
+
+1. Usar `yousef-hml` como origem de homologação e confirmar um segundo projeto Neon vazio para a restauração, com PostgreSQL 18, a mesma versão principal da origem. Confirmar o operador e o acesso aos dois projetos.
+2. Em cada projeto, copiar a conexão direta do painel **Connect** para o arquivo operacional privado correspondente. Para os comandos deste roteiro, usar `sslmode=verify-full` como única opção da URL. O ambiente de produção será configurado separadamente pelo operador do cliente.
+3. Inspecionar os dois alvos. Para inicializar somente homologação, usar `db:prepare` ou executar [postgres-bootstrap.sql](postgres-bootstrap.sql) inteiro no SQL Editor do Neon. Usar a mesma função de banco proprietária das tabelas para o acesso da aplicação. Preservar o destino de restauração vazio até executar `db:restore`.
+4. Usar dados sintéticos em homologação e seguir o ensaio de backup e restauração abaixo. Definir com o operador onde guardar o dump e seu manifesto, quem terá acesso e por quanto tempo. A recuperação de produção será validada no ambiente escolhido pelo cliente.
 
 ## Configuração privada por ambiente
 
