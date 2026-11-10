@@ -24,3 +24,4 @@ playwright-report/
 backups/
 exports/
 .data/
+.neon
