@@ -207,3 +207,56 @@ export const publicSlugs = appSchema.table('public_slugs', {
   userId: uuid('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 }, table => [primaryKey({ columns: [table.kind, table.slug] })]).enableRLS();
+
+/** Digital business card: private draft and published copy, public at `/c/<slug>`. */
+export const cards = appSchema.table('cards', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  slug: varchar('slug', { length: 40 }).notNull().unique(),
+  title: varchar('title', { length: 80 }).notNull(),
+  creationKey: uuid('creation_key').notNull(),
+  draft: jsonb('draft').notNull(),
+  published: jsonb('published'),
+  isPublished: boolean('is_published').default(false).notNull(),
+  publishedAt: timestamp('published_at', { withTimezone: true }),
+  qrCodeId: uuid('qr_code_id').references(() => qrCodes.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, table => [
+  unique('cards_user_creation_key_unique').on(table.userId, table.creationKey),
+  unique('cards_user_id_unique').on(table.userId, table.id),
+  index('cards_user_updated_idx').on(table.userId, table.updatedAt),
+]).enableRLS();
+
+/** Views, vCard saves and contact actions on public cards; bots and immediate repeats are not stored. */
+export const cardEvents = appSchema.table('card_events', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  cardId: uuid('card_id').notNull().references(() => cards.id, { onDelete: 'cascade' }),
+  kind: varchar('kind', { length: 16 }).notNull(),
+  target: varchar('target', { length: 24 }),
+  occurredAt: timestamp('occurred_at', { withTimezone: true }).defaultNow().notNull(),
+  deviceType: varchar('device_type', { length: 16 }).notNull(),
+  os: varchar('os', { length: 32 }).notNull(),
+  browser: varchar('browser', { length: 32 }).notNull(),
+  country: varchar('country', { length: 100 }),
+  ipAddress: varchar('ip_address', { length: 64 }),
+  userAgent: varchar('user_agent', { length: 1024 }).notNull(),
+}, table => [index('card_events_card_time_idx').on(table.cardId, table.occurredAt)]).enableRLS();
+
+/** Contacts left by visitors through the exchange form, with the consent text they accepted. */
+export const cardContacts = appSchema.table('card_contacts', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull(),
+  cardId: uuid('card_id').notNull(),
+  name: varchar('name', { length: 120 }).notNull(),
+  email: varchar('email', { length: 254 }),
+  phone: varchar('phone', { length: 32 }),
+  company: varchar('company', { length: 120 }),
+  message: varchar('message', { length: 1000 }),
+  consentText: varchar('consent_text', { length: 400 }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  ipAddress: varchar('ip_address', { length: 64 }),
+}, table => [
+  index('card_contacts_user_created_idx').on(table.userId, table.createdAt),
+  foreignKey({ columns: [table.userId, table.cardId], foreignColumns: [cards.userId, cards.id] }).onDelete('cascade'),
+]).enableRLS();

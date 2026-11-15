@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic';
 export default function robots(): MetadataRoute.Robots {
   const origin = getServerEnv().appUrl;
   return {
-    rules: { userAgent: '*', allow: '/', disallow: ['/api/', '/qr', '/app', '/overview', '/my-qrcodes', '/analytics', '/assets', '/linkpages', '/auth/'] },
+    rules: { userAgent: '*', allow: '/', disallow: ['/api/', '/qr', '/app', '/overview', '/my-qrcodes', '/analytics', '/assets', '/linkpages', '/cards', '/auth/'] },
     sitemap: `${origin}/sitemap.xml`,
   };
 }
