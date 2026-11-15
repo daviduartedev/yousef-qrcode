@@ -1,0 +1,11 @@
+{
+  "openNavigation": "Open navigation",
+  "closeNavigation": "Close navigation",
+  "searching": "Searching QR Codes…",
+  "searchError": "Couldn't load suggestions. View all results or try your search again.",
+  "searchResults": "QR Code suggestions",
+  "matchCount_one": "{{count}} suggestion",
+  "matchCount_other": "{{count}} suggestions",
+  "viewAll": "View all results",
+  "untitled": "Untitled QR Code"
+}

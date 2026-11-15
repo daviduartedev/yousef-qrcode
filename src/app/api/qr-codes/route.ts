@@ -1,5 +1,5 @@
 import { listCodes, listCodePage, createCode } from '@/server/qr-codes';
-import { readQRListQuery } from '@/lib/qr-list';
+import { qrListKeys, readQRListQuery } from '@/lib/qr-list';
 import { requireApiUser, requireSameOrigin, readJson, apiError, privateHeaders } from '@/server/http';
 export const runtime = 'nodejs';
 
@@ -7,7 +7,7 @@ export async function GET(request: Request) {
   try {
     const user = await requireApiUser(request);
     const params = new URL(request.url).searchParams;
-    const paginated = ['page', 'q', 'mode', 'status'].some(key => params.has(key));
+    const paginated = qrListKeys.some(key => params.has(key));
     const result = paginated
       ? await listCodePage(user.id, readQRListQuery(params))
       : { qrCodes: await listCodes(user.id) };

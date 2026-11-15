@@ -75,6 +75,11 @@ test('a private backup restores records, design and scan history into a separate
   await source.db.query(`INSERT INTO qrconnect.qr_codes (id, user_id, short_code, destination_url, design, tracking_enabled, total_scans)
     VALUES ($1, $2, 'restore-fixture', 'https://example.test/after-cutover', '{"version":1,"fixture":"after-cutover"}', false, 1)`, [qrId, userId]);
   await source.db.query('INSERT INTO qrconnect.qr_scans (qr_code_id) VALUES ($1)', [qrId]);
+  const folderId = crypto.randomUUID(), labelId = crypto.randomUUID();
+  await source.db.query('INSERT INTO qrconnect.qr_folders (id, user_id, name) VALUES ($1, $2, $3)', [folderId, userId, 'Recovered folder']);
+  await source.db.query('UPDATE qrconnect.qr_codes SET folder_id = $1 WHERE id = $2', [folderId, qrId]);
+  await source.db.query('INSERT INTO qrconnect.qr_labels (id, user_id, name) VALUES ($1, $2, $3)', [labelId, userId, 'Recovered label']);
+  await source.db.query('INSERT INTO qrconnect.qr_code_labels (user_id, qr_code_id, label_id) VALUES ($1, $2, $3)', [userId, qrId, labelId]);
   let result = source.run('backup', '--out', archive);
   assert.equal(result.status, 0, result.stderr);
   result = target.run('restore', '--from', archive);
@@ -83,6 +88,9 @@ test('a private backup restores records, design and scan history into a separate
   assert.equal(state.counts.user, '1');
   assert.equal(state.counts.qr_codes, '1');
   assert.equal(state.counts.qr_scans, '1');
+  assert.equal(state.counts.qr_folders, '1');
+  assert.equal(state.counts.qr_labels, '1');
+  assert.equal(state.counts.qr_code_labels, '1');
   assert.equal(state.rowSecurityEnabled, true);
   // SQL is the public output of a database restore, rather than an auth implementation detail.
   const { rows } = await target.db.query('SELECT short_code, destination_url, design, tracking_enabled, total_scans FROM qrconnect.qr_codes');

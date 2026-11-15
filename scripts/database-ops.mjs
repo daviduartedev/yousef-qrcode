@@ -8,6 +8,7 @@ import { Pool } from 'pg';
 
 class OperationError extends Error {}
 const tables = ['user', 'account', 'session', 'verification', 'qr_codes', 'qr_scans'];
+const organizationTables = ['qr_folders', 'qr_labels', 'qr_code_labels'];
 
 function backupDirectory(input, create = false) {
   if (!input) throw new OperationError('Provide a private backup directory.');
@@ -84,15 +85,18 @@ async function requireEmptyTarget(pool) {
 
 async function inspect(pool, environment) {
   if (!await hasSchema(pool)) return { environment, initialized: false, counts: null };
+  const { rows: relations } = await pool.query(`SELECT relname, relrowsecurity
+    FROM pg_class JOIN pg_namespace ON pg_namespace.oid = relnamespace WHERE nspname = 'qrconnect' AND relkind = 'r'`);
+  const hasOrganization = relations.some(row => organizationTables.includes(row.relname));
+  const expected = hasOrganization ? [...tables, ...organizationTables] : tables;
   const counts = {};
-  for (const name of tables) {
+  for (const name of expected) {
     const { rows } = await pool.query(`SELECT count(*)::text AS count FROM qrconnect."${name}"`);
     counts[name] = rows[0].count;
   }
   const { rows } = await pool.query('SELECT count(*)::text AS count FROM qrconnect_migrations.__drizzle_migrations');
   counts.migrations = rows[0].count;
-  const rls = await pool.query("SELECT relrowsecurity FROM pg_class JOIN pg_namespace ON pg_namespace.oid = relnamespace WHERE nspname = 'qrconnect' AND relkind = 'r'");
-  return { environment, initialized: true, counts, rowSecurityEnabled: rls.rows.length === tables.length && rls.rows.every(row => row.relrowsecurity) };
+  return { environment, initialized: true, counts, rowSecurityEnabled: relations.length === expected.length && relations.every(row => row.relrowsecurity) };
 }
 
 let pool;

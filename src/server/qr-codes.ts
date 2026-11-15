@@ -1,27 +1,17 @@
 import "server-only";
 import { randomBytes } from "node:crypto";
-import { and, count, desc, eq, ilike, or, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, exists, gte, ilike, inArray, isNull, lt, lte, ne, not, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { getDb } from "@/server/db";
-import { qrCodes } from "@/server/db/schema";
+import { qrCodeLabels, qrCodes, qrFolders } from "@/server/db/schema";
 import { getServerEnv } from "@/server/env";
 import { HttpError } from "@/server/http";
 import type { QRCodeRecord } from "@/lib/qr-types";
 import { qrDesignSchema, hasVisibleContrast } from "@/lib/qr-design";
-import { qrPageSize, type QRListQuery } from "@/lib/qr-list";
+import { qrFilterDate, qrPageSize, type QRFilterRule, type QRListQuery } from "@/lib/qr-list";
+import { safeDestination } from "@/lib/qr-destination";
 
-export function safeDestination(value: string) {
-  try {
-    const url = new URL(value);
-    return (
-      ["http:", "https:"].includes(url.protocol) &&
-      !url.username &&
-      !url.password
-    );
-  } catch {
-    return false;
-  }
-}
+export { safeDestination };
 const createInput = z
   .object({
     destination_url: z.string().trim().max(2048).refine(safeDestination),
@@ -56,6 +46,8 @@ export function qrRecord(row: typeof qrCodes.$inferSelect): QRCodeRecord {
     total_scans: row.totalScans,
     created_at: row.createdAt.toISOString(),
     updated_at: row.updatedAt.toISOString(),
+    folder_id: row.folderId,
+    watched: row.watched,
   };
 }
 
@@ -80,25 +72,78 @@ export async function getQRCounts(userId: string) {
   return counts;
 }
 
+const displayName = sql<string>`coalesce(${qrCodes.title}, ${qrCodes.destinationUrl})`;
+const escapeLike = (value: string) => value.replace(/[\\%_]/g, '\\$&');
+
+function filterCondition({ field, op, value }: QRFilterRule) {
+  if (field === 'mode') return eq(qrCodes.trackingEnabled, (value === 'tracked') !== (op === 'is_not'));
+  if (field === 'status') return and(eq(qrCodes.trackingEnabled, true),
+    op === 'is_not' ? ne(qrCodes.isActive, value === 'active') : eq(qrCodes.isActive, value === 'active'));
+  if (field === 'scans') {
+    const number = Number(value);
+    return op === 'gte' ? gte(qrCodes.totalScans, number) : op === 'lte' ? lte(qrCodes.totalScans, number) : eq(qrCodes.totalScans, number);
+  }
+  if (field === 'created' || field === 'updated') {
+    const start = qrFilterDate(value);
+    if (!start) return undefined;
+    const end = new Date(start.valueOf() + 86400000);
+    const column = field === 'created' ? qrCodes.createdAt : qrCodes.updatedAt;
+    return op === 'before' ? lt(column, start) : op === 'after' ? gte(column, end)
+      : and(gte(column, start), lt(column, end));
+  }
+  const text = field === 'name' ? displayName : qrCodes.destinationUrl;
+  const phrase = escapeLike(value);
+  const condition = ilike(text, op === 'contains' || op === 'not_contains' ? `%${phrase}%` : phrase);
+  return op === 'is_not' || op === 'not_contains' ? not(condition) : condition;
+}
+
 export async function listCodePage(userId: string, query: QRListQuery) {
-  const phrase = `%${query.q.replace(/[\\%_]/g, "\\$&")}%`;
-  const filters = and(
+  const db = getDb();
+  const phrase = `%${escapeLike(query.q)}%`;
+  const labelMatch = query.label ? exists(db.select({ one: sql`1` }).from(qrCodeLabels).where(and(
+    eq(qrCodeLabels.userId, userId), eq(qrCodeLabels.qrCodeId, qrCodes.id), eq(qrCodeLabels.labelId, query.label),
+  ))) : undefined;
+  const matches = and(
     eq(qrCodes.userId, userId),
+    query.focus ? eq(qrCodes.id, query.focus) : undefined,
     query.q ? or(ilike(qrCodes.title, phrase), ilike(qrCodes.destinationUrl, phrase)) : undefined,
     query.mode || query.status ? eq(qrCodes.trackingEnabled, query.mode !== 'direct') : undefined,
     query.status ? eq(qrCodes.isActive, query.status === 'active') : undefined,
+    query.folder === 'none' ? isNull(qrCodes.folderId) : query.folder ? exists(
+      db.select({ one: sql`1` }).from(qrFolders).where(and(
+        eq(qrFolders.id, qrCodes.folderId), eq(qrFolders.id, query.folder), eq(qrFolders.userId, userId),
+      )),
+    ) : undefined,
+    labelMatch,
+    query.watch ? and(eq(qrCodes.trackingEnabled, true), eq(qrCodes.watched, query.watch === 'yes')) : undefined,
+    ...query.rules.map(filterCondition),
   );
-  return getDb().transaction(async (tx) => {
-    const [{ total }] = await tx.select({ total: count() }).from(qrCodes).where(filters);
+  const ordering = {
+    newest: desc(qrCodes.createdAt),
+    oldest: asc(qrCodes.createdAt),
+    updated: desc(qrCodes.updatedAt),
+    name: asc(sql`lower(${displayName})`),
+    scans: desc(qrCodes.totalScans),
+  };
+  return db.transaction(async (tx) => {
+    const [{ total }] = await tx.select({ total: count() }).from(qrCodes).where(matches);
     const pages = Math.max(1, Math.ceil(total / qrPageSize));
     const page = Math.min(query.page, pages);
-    const rows = await tx.select().from(qrCodes).where(filters)
-      .orderBy(desc(qrCodes.createdAt), desc(qrCodes.id))
+    const rows = await tx.select().from(qrCodes).where(matches)
+      .orderBy(ordering[query.sort], desc(qrCodes.id))
       .limit(qrPageSize).offset((page - 1) * qrPageSize);
-    return { qrCodes: rows.map(qrRecord), total, page, pages };
+    const assignments = rows.length ? await tx.select({ qrCodeId: qrCodeLabels.qrCodeId, labelId: qrCodeLabels.labelId })
+      .from(qrCodeLabels).where(and(eq(qrCodeLabels.userId, userId), inArray(qrCodeLabels.qrCodeId, rows.map(row => row.id)))) : [];
+    const labelsByCode = new Map<string, string[]>();
+    for (const { qrCodeId, labelId } of assignments) {
+      const list = labelsByCode.get(qrCodeId);
+      if (list) list.push(labelId);
+      else labelsByCode.set(qrCodeId, [labelId]);
+    }
+    return { qrCodes: rows.map(row => ({ ...qrRecord(row), label_ids: labelsByCode.get(row.id) ?? [] })), total, page, pages };
   }, { isolationLevel: 'repeatable read', accessMode: 'read only' });
 }
-export async function createCode(userId: string, input: unknown) {
+export async function createCode(userId: string, input: unknown, options?: { recordId?: string }) {
   const parsed = createInput.safeParse(input);
   if (!parsed.success)
     throw new HttpError(
@@ -110,6 +155,7 @@ export async function createCode(userId: string, input: unknown) {
     const [row] = await getDb()
       .insert(qrCodes)
       .values({
+        id: options?.recordId,
         userId,
         shortCode,
         destinationUrl: new URL(parsed.data.destination_url).href,
@@ -120,9 +166,14 @@ export async function createCode(userId: string, input: unknown) {
         design: parsed.data.design,
         trackingEnabled: parsed.data.tracking_enabled,
       })
-      .onConflictDoNothing({ target: qrCodes.shortCode })
+      .onConflictDoNothing()
       .returning();
     if (row) return codeResponse(row);
+    if (options?.recordId) {
+      const [existing] = await getDb().select().from(qrCodes)
+        .where(and(eq(qrCodes.userId, userId), eq(qrCodes.id, options.recordId)));
+      if (existing) return codeResponse(existing);
+    }
   }
   throw new HttpError(503, "Unable to allocate a QR code. Please retry");
 }

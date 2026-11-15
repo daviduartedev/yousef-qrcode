@@ -1,4 +1,5 @@
-import { pgSchema, uuid, text, timestamp, boolean, index, integer, varchar, jsonb } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
+import { pgSchema, uuid, text, timestamp, boolean, index, integer, varchar, jsonb, unique, uniqueIndex, primaryKey, foreignKey } from 'drizzle-orm/pg-core';
 import type { QRDesign } from '@/lib/qr-design';
 
 export const appSchema = pgSchema('qrconnect');
@@ -51,6 +52,21 @@ export const verification = appSchema.table('verification', {
   updatedAt: updatedAt(),
 }, table => [index('verification_identifier_idx').on(table.identifier)]).enableRLS();
 
+export const qrFolders = appSchema.table('qr_folders', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  name: varchar('name', { length: 80 }).notNull(),
+}, table => [uniqueIndex('qr_folders_user_name_idx').on(table.userId, sql`lower(${table.name})`)]).enableRLS();
+
+export const qrLabels = appSchema.table('qr_labels', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  name: varchar('name', { length: 80 }).notNull(),
+}, table => [
+  unique('qr_labels_user_id_unique').on(table.userId, table.id),
+  uniqueIndex('qr_labels_user_name_idx').on(table.userId, sql`lower(${table.name})`),
+]).enableRLS();
+
 export const qrCodes = appSchema.table('qr_codes', {
   id: uuid('id').primaryKey().defaultRandom(),
   userId: uuid('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
@@ -61,10 +77,27 @@ export const qrCodes = appSchema.table('qr_codes', {
   design: jsonb('design').$type<QRDesign>(),
   trackingEnabled: boolean('tracking_enabled').notNull().default(true),
   isActive: boolean('is_active').notNull().default(true),
+  folderId: uuid('folder_id').references(() => qrFolders.id, { onDelete: 'set null' }),
+  watched: boolean('watched').notNull().default(false),
   totalScans: integer('total_scans').notNull().default(0),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
-}, table => [index('qr_codes_user_idx').on(table.userId)]).enableRLS();
+}, table => [
+  index('qr_codes_user_idx').on(table.userId),
+  index('qr_codes_folder_idx').on(table.folderId),
+  unique('qr_codes_user_id_unique').on(table.userId, table.id),
+]).enableRLS();
+
+export const qrCodeLabels = appSchema.table('qr_code_labels', {
+  userId: uuid('user_id').notNull(),
+  qrCodeId: uuid('qr_code_id').notNull(),
+  labelId: uuid('label_id').notNull(),
+}, table => [
+  primaryKey({ columns: [table.userId, table.qrCodeId, table.labelId] }),
+  index('qr_code_labels_label_idx').on(table.userId, table.labelId),
+  foreignKey({ columns: [table.userId, table.qrCodeId], foreignColumns: [qrCodes.userId, qrCodes.id] }).onDelete('cascade'),
+  foreignKey({ columns: [table.userId, table.labelId], foreignColumns: [qrLabels.userId, qrLabels.id] }).onDelete('cascade'),
+]).enableRLS();
 
 export const qrScans = appSchema.table('qr_scans', {
   id: uuid('id').primaryKey().defaultRandom(),

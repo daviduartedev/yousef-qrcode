@@ -5,6 +5,8 @@ import enTranslations from './locales/en.json';
 import arTranslations from './locales/ar.json';
 import enCopy from './locales/copy.en.json';
 import arCopy from './locales/copy.ar.json';
+import enWorkspace from './locales/workspace.en.json';
+import arWorkspace from './locales/workspace.ar.json';
 
 i18n
   .use(initReactI18next)
@@ -13,10 +15,12 @@ i18n
       en: {
         translation: enTranslations,
         copy: enCopy,
+        workspace: enWorkspace,
       },
       ar: {
         translation: arTranslations,
         copy: arCopy,
+        workspace: arWorkspace,
       },
     },
     lng: 'en',

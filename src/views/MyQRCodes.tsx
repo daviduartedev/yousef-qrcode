@@ -12,9 +12,12 @@ const QRCodeStyled = dynamic(() => import("@/components/QRCodePreview"), {
   ssr: false,
 });
 import { getQRCodeAnalytics, deleteQRCode, setQRCodeActive } from "@/lib/qrTracking";
-import { qrListHref, type QRListQuery } from "@/lib/qr-list";
+import { clearQRFilters, hasQRFilters, qrListHref, type QRListQuery } from "@/lib/qr-list";
 import { WorkspaceShell } from "@/components/WorkspaceShell";
-import { QRListFilters } from "@/components/QRListFilters";
+import { QRListFilters, type QROrganization } from "@/components/QRListFilters";
+import { QRCollections, QRCodeOrganization } from "@/components/QRCollections";
+import { QRBulkActions } from "@/components/QRBulkActions";
+import { QRImportDialog } from "@/components/QRImportDialog";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -37,6 +40,8 @@ import {
   Pencil,
   Pause,
   Play,
+  Star,
+  Folder,
 } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { useToast } from "@/hooks/use-toast";
@@ -106,17 +111,31 @@ function SavedQRThumbnail({ qr, data }: { qr: QRCodeRecord; data: string }) {
   );
 }
 
-const MyQRCodes = ({ query, result, origin }: {
+const MyQRCodes = ({ query, result, origin, organization }: {
   query: QRListQuery;
   result: { qrCodes: QRCodeRecord[]; total: number; page: number; pages: number };
   origin: string;
+  organization: QROrganization;
 }) => {
   const { t: copy, i18n } = useTranslation("copy");
   const { navigate } = useEditorNavigation();
   const router = useRouter();
   const { toast } = useToast();
   const { qrCodes, total, page, pages } = result;
-  const filtered = Boolean(query.q || query.mode || query.status);
+  const filtered = hasQRFilters(query);
+  const isGrid = query.view === 'grid';
+  const scope = qrListHref(query);
+  const [selection, setSelection] = useState<{ scope: string; ids: string[] }>({ scope, ids: [] });
+  if (selection.scope !== scope) setSelection({ scope, ids: [] });
+  const selectedIds = new Set(selection.scope === scope ? selection.ids : []);
+  const selected = qrCodes.filter(qr => selectedIds.has(qr.id));
+  const allSelected = qrCodes.length > 0 && qrCodes.every(qr => selectedIds.has(qr.id));
+  const target = useRef<HTMLHeadingElement>(null);
+  const selectAll = useRef<HTMLInputElement>(null);
+  useEffect(() => { if (query.focus) target.current?.focus(); }, [query.focus]);
+  useEffect(() => {
+    if (selectAll.current) selectAll.current.indeterminate = !allSelected && selected.length > 0;
+  }, [allSelected, selected.length]);
   const [pendingAction, setPendingAction] = useState(false);
   const [refreshing, startRefresh] = useTransition();
   const busy = pendingAction || refreshing;
@@ -130,6 +149,12 @@ const MyQRCodes = ({ query, result, origin }: {
   const shortCode = expanded?.short_code;
   const scans = expanded?.total_scans;
   const currentDetail = detail?.shortCode === shortCode && detail?.scans === scans ? detail : null;
+  const refresh = () => startRefresh(() => router.refresh());
+  const clearSelection = () => setSelection({ scope, ids: [] });
+  const toggleCode = (qr: QRCodeRecord, checked: boolean) => setSelection(previous => ({
+    scope,
+    ids: checked ? [...previous.ids, qr.id] : previous.ids.filter(id => id !== qr.id),
+  }));
 
   useEffect(() => {
     if (!shortCode || scans === undefined) return;
@@ -153,7 +178,7 @@ const MyQRCodes = ({ query, result, origin }: {
     setPendingAction(true);
     try {
       await action();
-      startRefresh(() => router.refresh());
+      refresh();
       toast({ title: copy(success) });
     } catch {
       toast({ title: copy(error), variant: "destructive" });
@@ -176,6 +201,15 @@ const MyQRCodes = ({ query, result, origin }: {
       qr.is_active ? "QR Code paused" : "QR Code reactivated",
       "Could not change tracking status. Try again.",
     );
+  }
+
+  function organize(qr: QRCodeRecord, body: { folderId: string | null } | { watched: boolean } | { labelId: string; labeled: boolean }) {
+    void runAction(async () => {
+      const response = await fetch(`/api/qr-codes/${qr.id}/organization`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      });
+      if (!response.ok) throw new Error();
+    }, 'Changes saved.', 'Could not save changes. Try again.');
   }
 
   const getQRUrl = (qr: QRCodeRecord) =>
@@ -314,16 +348,29 @@ const MyQRCodes = ({ query, result, origin }: {
               {copy("Manage and view analytics for your QR Codes")}
             </p>
           </div>
-          <Button className="min-h-11 gap-2 bg-blue-700 text-white hover:bg-blue-800" onClick={() => navigate("/app")}>
-            <Plus className="size-4" aria-hidden="true" />
-            {copy("Create New QR Code")}
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <QRImportDialog onImported={refresh} />
+            <Button className="min-h-11 gap-2 bg-blue-700 text-white hover:bg-blue-800" onClick={() => navigate("/app")}>
+              <Plus className="size-4" aria-hidden="true" />
+              {copy("Create New QR Code")}
+            </Button>
+          </div>
         </div>
 
-        <QRListFilters key={qrListHref({ ...query, page: 1 })} query={query} />
-        <p aria-live="polite" className="text-sm text-muted-foreground">
-          {copy("QR Codes found: {{total}}", { total: new Intl.NumberFormat(i18n.resolvedLanguage).format(total) })}
-        </p>
+        <QRCollections query={query} organization={organization} onChanged={refresh} />
+        <QRListFilters key={qrListHref({ ...query, page: 1 })} query={query} {...organization} />
+        <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+          <p aria-live="polite" className="text-muted-foreground">
+            {copy("QR Codes found: {{total}}", { total: new Intl.NumberFormat(i18n.resolvedLanguage).format(total) })}
+          </p>
+          {qrCodes.length > 0 && <label className="flex min-h-11 cursor-pointer items-center gap-2 rounded-md border bg-card px-3 font-medium">
+            <input type="checkbox" ref={selectAll} className="size-4 accent-blue-700" checked={allSelected} onChange={event =>
+              setSelection({ scope, ids: event.target.checked ? qrCodes.map(qr => qr.id) : [] })} />
+            {copy('Select all on this page')}
+          </label>}
+        </div>
+        {selected.length > 0 && <QRBulkActions selected={selected} onClear={clearSelection} onChanged={refresh}
+          labels={organization.labels} origin={origin} />}
 
         {qrCodes.length === 0 ? (
           <Card className="p-6 text-center sm:p-12">
@@ -334,25 +381,29 @@ const MyQRCodes = ({ query, result, origin }: {
             <p className="text-muted-foreground mb-6">
               {copy(filtered ? "Change your search or clear the filters." : "Your saved codes will appear here.")}
             </p>
-            <Button asChild className="min-h-11"><Link href={filtered ? "/my-qrcodes" : "/app"}>
+            <Button asChild className="min-h-11"><Link href={filtered ? qrListHref(clearQRFilters(query)) : "/app"}>
               {copy(filtered ? "Clear filters" : "Create QR Code")}
             </Link></Button>
           </Card>
         ) : (
-          <div className="space-y-4">
+          <div className={isGrid ? "grid items-start gap-3 sm:grid-cols-2 2xl:grid-cols-3" : "space-y-3"}>
             {qrCodes.map((qr) => {
               const analytics = expanded?.id === qr.id ? currentDetail?.analytics : null;
               return (
-              <Card key={qr.id} className="overflow-hidden">
+              <Card key={qr.id} className={`min-w-0 overflow-hidden ${selectedIds.has(qr.id) || query.focus === qr.id ? 'border-blue-600 ring-1 ring-blue-600' : ''}`}>
                 <Collapsible
                   open={expandedQR === qr.id}
                   onOpenChange={(open) => handleExpand(qr.id, open)}
                 >
-                  <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-                    <div className="flex min-w-0 basis-full items-center gap-3 sm:flex-1">
+                  <div className={`flex flex-wrap items-center justify-between gap-3 px-4 py-3 ${isGrid ? '' : 'xl:flex-nowrap'}`}>
+                    <div className={`flex min-w-0 basis-full items-center gap-3 ${isGrid ? '' : 'sm:flex-1'}`}>
+                      <input type="checkbox" className="size-4 shrink-0 accent-blue-700" checked={selectedIds.has(qr.id)}
+                        aria-label={copy('Select {{name}}', { name: qr.title || qr.destination_url })}
+                        onChange={event => toggleCode(qr, event.target.checked)} />
                       <SavedQRThumbnail qr={qr} data={getQRUrl(qr)} />
                       <div className="min-w-0">
-                        <h3 className="break-words font-semibold">{qr.title || qr.destination_url}</h3>
+                        <h3 ref={query.focus === qr.id ? target : undefined} tabIndex={query.focus === qr.id ? -1 : undefined}
+                          dir="auto" className="break-words font-semibold">{qr.title || qr.destination_url}</h3>
                         <p dir="ltr" className="truncate text-start text-sm text-muted-foreground" title={qr.destination_url}>{qr.destination_url}</p>
                         <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                           <span className="rounded bg-muted px-2 py-1 font-medium">{copy(qr.tracking_enabled ? "Tracked" : "Direct")}</span>
@@ -365,10 +416,19 @@ const MyQRCodes = ({ query, result, origin }: {
                           <span className="flex items-center gap-1"><Calendar className="size-3" aria-hidden="true" />
                             {new Date(qr.created_at).toLocaleDateString(i18n.resolvedLanguage, { timeZone: "UTC" })}
                           </span>
+                          {organization.folders.filter(folder => folder.id === qr.folder_id).map(folder =>
+                            <span key={folder.id} className="inline-flex items-center gap-1 break-all"><Folder size={13} aria-hidden="true" />{folder.name}</span>)}
+                          {organization.labels.filter(label => qr.label_ids?.includes(label.id)).map(label =>
+                            <span key={label.id} dir="auto" className="break-all rounded bg-blue-100 px-2 py-1 text-blue-900 dark:bg-blue-950 dark:text-blue-100">{label.name}</span>)}
                         </div>
                       </div>
                     </div>
                     <div className="flex flex-wrap items-center gap-1">
+                      {qr.tracking_enabled && <Button variant="ghost" size="icon" className="size-11" disabled={busy}
+                        title={copy('Watchlist')} aria-label={copy('Watchlist')} aria-pressed={Boolean(qr.watched)}
+                        onClick={() => organize(qr, { watched: !qr.watched })}>
+                        <Star className={`size-4 ${qr.watched ? 'fill-amber-400 text-amber-700 dark:text-amber-300' : ''}`} aria-hidden="true" />
+                      </Button>}
                       <Button variant="ghost" size="icon" className="size-11" title={copy("Edit design")} aria-label={copy("Edit design")}
                         onClick={() => navigate("/app?edit=" + encodeURIComponent(qr.id))}>
                         <Pencil className="size-4" aria-hidden="true" />
@@ -395,13 +455,14 @@ const MyQRCodes = ({ query, result, origin }: {
                   </div>
 
                   <CollapsibleContent>
-                    <div className="border-t border-border p-6 bg-muted/30">
+                    <div className="border-t border-border bg-muted/30 p-4 sm:p-5">
+                      <QRCodeOrganization qr={qr} organization={organization} busy={busy} onChange={body => organize(qr, body)} />
                       {/* QR Code Preview Section */}
                       <div className="mb-6 p-4 bg-card rounded-lg shadow-sm">
                         <h4 className="text-sm font-semibold mb-4">
                           {copy("Your QR Code")}
                         </h4>
-                        <div className="flex flex-col md:flex-row items-center gap-6">
+                        <div className={`flex min-w-0 flex-col items-center gap-4 ${isGrid ? '' : 'md:flex-row'}`}>
                           <div className="bg-white p-4 rounded-lg flex items-center justify-center">
                             <div id={`qr-${qr.short_code}`}>
                               <QRCodeStyled
@@ -411,7 +472,7 @@ const MyQRCodes = ({ query, result, origin }: {
                               />
                             </div>
                           </div>
-                          <div className="flex-1 space-y-3">
+                          <div className="min-w-0 flex-1 space-y-3">
                             <div>
                               <p className="text-xs text-muted-foreground mb-1">
                                 {qr.tracking_enabled
@@ -467,7 +528,7 @@ const MyQRCodes = ({ query, result, origin }: {
                       ) : analytics ? (
                         <>
                           {/* Stats Summary */}
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                          <div className={`mb-6 grid grid-cols-2 gap-4 ${isGrid ? '' : 'md:grid-cols-4'}`}>
                             <div className="bg-card rounded-lg p-4 text-center shadow-sm">
                               <p className="text-3xl font-bold text-primary">
                                 {analytics.totalScans}
@@ -523,7 +584,7 @@ const MyQRCodes = ({ query, result, origin }: {
                               </p>
                             </div>
                           ) : (
-                            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+                            <div className={`grid gap-6 ${isGrid ? '' : 'md:grid-cols-2 xl:grid-cols-4'}`}>
                               <div className="bg-card rounded-lg p-4 shadow-sm">
                                 <DonutChart
                                   data={convertToChartData(

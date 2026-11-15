@@ -1,16 +1,17 @@
 'use client';
 
-import { LogOut, QrCode, Search } from 'lucide-react';
-import { useSyncExternalStore, type FormEvent } from 'react';
+import { LogOut, QrCode } from 'lucide-react';
+import { useSyncExternalStore } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useEditorNavigation } from '@/components/EditorNavigation';
 import { LanguageToggle } from '@/components/LanguageToggle';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { WorkspaceDrawer } from '@/components/WorkspaceDrawer';
+import { WorkspaceSearch } from '@/components/WorkspaceSearch';
 import { WorkspaceSidebar } from '@/components/WorkspaceSidebar';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
-import { qrListHref, readQRListQuery } from '@/lib/qr-list';
 
 const sidebarPreference = 'qrconnect-sidebar-collapsed';
 const sidebarCollapsed = () => sessionStorage.getItem(sidebarPreference) === 'true';
@@ -37,44 +38,35 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
     }
   }
 
-  function search(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const value = String(new FormData(event.currentTarget).get('q') ?? '');
-    navigate(qrListHref(readQRListQuery(new URLSearchParams({ q: value }))));
-  }
-
   const columns = collapsed ? 'lg:grid-cols-[4.25rem_minmax(0,1fr)]'
     : 'lg:grid-cols-[14.75rem_minmax(0,1fr)] 2xl:grid-cols-[16.5rem_minmax(0,1fr)]';
-  return <div className={`grid min-h-screen min-w-0 grid-rows-[auto_1fr] bg-muted/40 text-foreground lg:grid-rows-[1fr] ${columns}`}>
-      <WorkspaceSidebar collapsed={collapsed} onToggle={() => {
-        sessionStorage.setItem(sidebarPreference, String(!collapsed));
-        window.dispatchEvent(new Event(sidebarPreference));
-      }} />
-      <div className="min-w-0">
-        <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b bg-background px-4 py-2 sm:px-6">
+  return <div className={`grid min-h-screen min-w-0 bg-muted/40 text-foreground ${columns}`}>
+    <WorkspaceSidebar collapsed={collapsed} onToggle={() => {
+      sessionStorage.setItem(sidebarPreference, String(!collapsed));
+      window.dispatchEvent(new Event(sidebarPreference));
+    }} />
+    <div className="min-w-0">
+      <header className="flex flex-wrap items-center justify-between gap-x-2 gap-y-2 border-b bg-background px-3 py-2 sm:gap-x-3 sm:px-6">
+        <div className="flex min-w-0 items-center gap-1">
+          <WorkspaceDrawer />
           <a href="/my-qrcodes" onClick={event => {
-            if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+            if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
             event.preventDefault();
             navigate('/my-qrcodes');
-          }} className="inline-flex min-h-11 items-center gap-2 rounded-md bg-muted px-3 text-sm font-medium">
-            <QrCode size={17} aria-hidden="true" />{copy('QR Codes')}
+          }} className="inline-flex min-h-11 items-center gap-1.5 rounded-md bg-muted px-2 text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring sm:gap-2 sm:px-3">
+            <QrCode className="size-4 shrink-0" aria-hidden="true" />{copy('QR Codes')}
           </a>
-          <form role="search" onSubmit={search} className="order-last w-full sm:order-none sm:ms-auto sm:w-56 lg:w-72">
-            <div className="flex min-h-11 items-center gap-2 rounded-md bg-muted px-3 focus-within:ring-2 focus-within:ring-ring">
-              <button type="submit" aria-label={copy('Search QR Codes')} className="grid size-8 shrink-0 place-items-center rounded-sm text-muted-foreground hover:text-foreground">
-                <Search size={17} aria-hidden="true" />
-              </button>
-              <input type="search" name="q" maxLength={2048} aria-label={copy('Search QR Codes')} placeholder={copy('Search QR Codes')}
-                className="min-w-0 flex-1 bg-transparent text-sm outline-none" />
-            </div>
-          </form>
-          <div className="flex shrink-0 flex-wrap items-center gap-1">
-            <LanguageToggle />
-            <ThemeToggle />
-            <Button variant="ghost" className="min-h-11 gap-2" onClick={logout}><LogOut size={16} aria-hidden="true" />{copy('Sair')}</Button>
-          </div>
-        </header>
-        {children}
-      </div>
+        </div>
+        <WorkspaceSearch />
+        <div className="ms-auto flex shrink-0 items-center gap-1 sm:ms-0">
+          <LanguageToggle />
+          <ThemeToggle />
+          <Button type="button" variant="ghost" className="size-11 px-0 sm:w-auto sm:px-3" onClick={logout} aria-label={copy('Sair')}>
+            <LogOut size={16} aria-hidden="true" className="rtl:-scale-x-100" /><span className="hidden sm:inline">{copy('Sair')}</span>
+          </Button>
+        </div>
+      </header>
+      {children}
+    </div>
   </div>;
 }

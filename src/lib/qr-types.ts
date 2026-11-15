@@ -13,6 +13,9 @@ export interface QRCodeRecord {
   total_scans: number;
   created_at: string;
   updated_at: string;
+  folder_id?: string | null;
+  watched?: boolean;
+  label_ids?: string[];
 }
 
 export interface ScanRecord {

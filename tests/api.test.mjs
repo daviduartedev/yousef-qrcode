@@ -544,3 +544,138 @@ test("a valid Unicode display title uses the same character limit as Postgres", 
   assert.equal(response.status, 201);
   assert.equal((await response.json()).qrCode.title, destination);
 });
+
+test("global QR suggestions rank title matches and never cross account boundaries", async () => {
+  const search = (q, cookie) => request('/api/qr-codes/search?' + new URLSearchParams({ q }), { cookie });
+  assert.equal((await search("launch")).status, 401);
+  const owner = await register();
+  const stranger = await register();
+  await createManagedCode(stranger, "Launch", "https://example.test/another-account");
+  const destinationMatch = await createManagedCode(owner, "Campaign", "https://example.test/a-launch");
+  const exactMatch = await createManagedCode(owner, "Launch", "https://example.test/campaign");
+  const literalMatch = await createManagedCode(owner, "SKU_1%", "https://example.test/literal");
+  await createManagedCode(owner, "SKUx1x", "https://example.test/any");
+  const response = await search(" lAuNcH ", owner);
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get("cache-control"), /private.*no-store/);
+  assert.deepEqual((await response.json()).results.map(item => item.id), [exactMatch.qrCode.id, destinationMatch.qrCode.id]);
+  assert.deepEqual((await (await search("SKU_1%", owner)).json()).results.map(item => item.id), [literalMatch.qrCode.id]);
+  assert.deepEqual((await (await search("   ", owner)).json()).results, []);
+});
+
+test("list operators, dates, layout and stable sort compose with text and pagination", async () => {
+  const owner = await register();
+  const other = await register();
+  await createManagedCode(other, "Team Aardvark", "https://example.test/team");
+  const expected = [];
+  for (let index = 23; index >= 1; index--) {
+    const title = `Team ${String(index).padStart(2, "0")}`;
+    const { qrCode } = await createManagedCode(owner, title, `https://example.test/team/${index}`);
+    expected.unshift(qrCode);
+  }
+  await createManagedCode(owner, "Team 00", "https://example.test/team/direct", false);
+  await createManagedCode(owner, "Team 99", "https://example.test/ignore/team");
+  const scanned = await createManagedCode(owner, "Team 98", "https://example.test/team/scanned");
+  assert.equal((await fetch(scanned.trackingUrl, { redirect: "manual" })).status, 302);
+  const rules = JSON.stringify([
+    ["mode", "is_not", "direct"], ["destination", "not_contains", "/ignore/"], ["scans", "lte", "٠"],
+    ["created", "is", expected[0].created_at.slice(0, 10)],
+  ]);
+  const query = (page) => new URLSearchParams({ q: "TEAM", sort: "name", view: "grid", rules, page });
+  const first = await (await request("/api/qr-codes?" + query("1"), { cookie: owner })).json();
+  const second = await (await request("/api/qr-codes?" + query("2"), { cookie: owner })).json();
+  assert.equal(first.total, 23);
+  assert.equal(second.page, 2);
+  assert.equal(second.pages, 2);
+  assert.deepEqual([...first.qrCodes, ...second.qrCodes].map(row => row.id), expected.map(row => row.id));
+
+  const exact = await (await request("/api/qr-codes?focus=" + expected[0].id, { cookie: owner })).json();
+  assert.deepEqual(exact.qrCodes.map(row => row.id), [expected[0].id]);
+  assert.equal((await (await request("/api/qr-codes?focus=" + expected[0].id, { cookie: other })).json()).total, 0);
+});
+
+test("folders, labels, watchlists and bulk updates are scoped to the account", async () => {
+  const owner = await register();
+  const other = await register();
+  const { qrCode: tracked } = await createManagedCode(owner, "Tracked example", "https://example.test/t");
+  const { qrCode: direct } = await createManagedCode(owner, "Direct example", "https://example.test/d", false);
+  const { qrCode: foreign } = await createManagedCode(other, "Other example", "https://example.test/x");
+  const collection = (cookie, action, fields) => request("/api/qr-codes/organization", {
+    cookie, method: "POST", body: { action, ...fields },
+  });
+  const edit = (cookie, qrCode, body) => request(`/api/qr-codes/${qrCode.id}/organization`, {
+    cookie, method: "PATCH", body,
+  });
+  const folder = await (await collection(owner, "create", { collection: "folder", name: "Guides" })).json();
+  const label = await (await collection(owner, "create", { collection: "label", name: "Launch" })).json();
+  const privateFolder = await (await collection(other, "create", { collection: "folder", name: "Guides" })).json();
+  const privateLabel = await (await collection(other, "create", { collection: "label", name: "Launch" })).json();
+  assert.equal((await collection(owner, "create", { collection: "folder", name: " guides " })).status, 409);
+  assert.equal((await collection(owner, "rename", { collection: "folder", name: "Stolen", id: privateFolder.id })).status, 404);
+  assert.equal((await request("/api/qr-codes/organization")).status, 401);
+  assert.deepEqual(await (await request("/api/qr-codes/organization", { cookie: owner })).json(), { folders: [folder], labels: [label] });
+  assert.equal((await edit(owner, tracked, { folderId: privateFolder.id })).status, 404);
+  assert.equal((await edit(owner, foreign, { folderId: folder.id })).status, 404);
+  assert.equal((await edit(owner, direct, { watched: true })).status, 400);
+  assert.equal((await edit(owner, tracked, { folderId: folder.id })).status, 200);
+  assert.equal((await edit(owner, tracked, { watched: true })).status, 200);
+
+  const bulk = (labelIds) => request("/api/qr-codes/bulk", {
+    cookie: owner, method: "POST", body: { ids: [tracked.id, foreign.id, direct.id], labelIds },
+  });
+  assert.equal((await bulk([label.id, privateLabel.id])).status, 404);
+  assert.equal((await (await request("/api/qr-codes?label=" + label.id, { cookie: owner })).json()).total, 0);
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const result = await bulk([label.id]);
+    assert.equal(result.status, 200);
+    assert.deepEqual((await result.json()).results, [
+      { id: tracked.id, status: "updated" }, { id: foreign.id, status: "not_found" }, { id: direct.id, status: "updated" },
+    ]);
+  }
+  const filters = new URLSearchParams({ folder: folder.id, label: label.id, watch: "yes", q: "tracked" });
+  const result = await (await request("/api/qr-codes?" + filters, { cookie: owner })).json();
+  assert.equal(result.total, 1);
+  assert.equal(result.qrCodes[0].id, tracked.id);
+  assert.deepEqual(result.qrCodes[0].label_ids, [label.id]);
+  assert.equal((await (await request("/api/qr-codes?label=" + label.id, { cookie: other })).json()).total, 0);
+
+  assert.equal((await collection(owner, "delete", { collection: "folder", id: folder.id })).status, 200);
+  assert.equal((await edit(owner, tracked, { labelId: label.id, labeled: false })).status, 200);
+  const retained = await (await request("/api/qr-codes?focus=" + tracked.id, { cookie: owner })).json();
+  assert.equal(retained.qrCodes[0].folder_id, null);
+  assert.deepEqual(retained.qrCodes[0].label_ids, []);
+  assert.equal(retained.qrCodes[0].watched, true);
+});
+
+test("CSV import persists valid rows once and reports invalid rows without access across accounts", async () => {
+  const owner = await register();
+  const other = await register();
+  const csv = 'title,destination_url,mode\r\n"Guide, Arabic",https://example.test/a,direct\r\nBad,ftp://example.test,tracked\r\nSpring,https://example.test/b,tracked\r\n';
+  const id = randomUUID();
+  const upload = (body, options = {}) => fetch(new URL("/api/qr-codes/import", base), {
+    method: "POST",
+    body,
+    headers: { origin: options.origin || base, cookie: options.cookie ?? owner, "content-type": "text/csv", "x-qr-import-id": id },
+  });
+  assert.equal((await upload(csv, { origin: "https://other.example" })).status, 403);
+  assert.equal((await upload(csv, { cookie: "" })).status, 401);
+  assert.equal((await upload("wrong,header\nsite,https://example.test")).status, 400);
+  assert.equal((await upload("X".repeat(128 * 1024 + 1))).status, 413);
+  const [first, duplicate] = await Promise.all([upload(csv), upload(csv)]);
+  assert.equal(first.status, 200);
+  assert.equal(duplicate.status, 200);
+  const outcome = await first.json();
+  assert.deepEqual(await duplicate.json(), outcome);
+  assert.deepEqual(outcome.rows.map(row => [row.line, row.status]), [[2, "created"], [3, "invalid"], [4, "created"]]);
+  assert.deepEqual(outcome.rows[1], { line: 3, status: "invalid", issue: "invalid_destination" });
+  assert.deepEqual([outcome.created, outcome.invalid, outcome.failed], [2, 1, 0]);
+  const list = await (await request("/api/qr-codes?page=1", { cookie: owner })).json();
+  assert.equal(list.total, 2);
+  const imported = await (await request("/api/qr-codes/" + outcome.rows[0].id, { cookie: owner })).json();
+  assert.equal(imported.qrCode.design, null);
+  assert.equal(imported.qrCode.title, "Guide, Arabic");
+  assert.equal(imported.trackingUrl, null);
+  const tracked = await (await request("/api/qr-codes/" + outcome.rows[2].id, { cookie: owner })).json();
+  assert.equal((await fetch(tracked.trackingUrl, { redirect: "manual" })).status, 302);
+  assert.equal((await request("/api/qr-codes/" + outcome.rows[2].id, { cookie: other })).status, 404);
+});

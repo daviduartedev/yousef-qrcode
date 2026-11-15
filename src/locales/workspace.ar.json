@@ -1,0 +1,15 @@
+{
+  "openNavigation": "افتح قائمة التنقل",
+  "closeNavigation": "أغلق قائمة التنقل",
+  "searching": "جارٍ البحث عن رموز QR…",
+  "searchError": "تعذّر تحميل الاقتراحات. اعرض كل النتائج أو أعد البحث.",
+  "searchResults": "اقتراحات رموز QR",
+  "matchCount_zero": "لا توجد اقتراحات",
+  "matchCount_one": "اقتراح واحد",
+  "matchCount_two": "اقتراحان",
+  "matchCount_few": "{{count}} اقتراحات",
+  "matchCount_many": "{{count}} اقتراحًا",
+  "matchCount_other": "{{count}} اقتراح",
+  "viewAll": "اعرض كل النتائج",
+  "untitled": "رمز QR بلا عنوان"
+}

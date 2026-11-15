@@ -1,6 +1,6 @@
 # Roadmaps — QRConnect
 
-Planejamento original de 01/11/2026, com estado atualizado em 11/11/2026. Os PRs #5 e #10 entregaram a base e o editor. Os PRs #16 e #17 integraram o preparo operacional, o Neon e a correção de build para a Vercel. As especificações pai #1 e #6 permanecem abertas intencionalmente.
+Planejamento original de 01/11/2026, com estado atualizado em 15/11/2026. Os PRs #5 e #10 entregaram a base e o editor. Os PRs #16 e #17 integraram o preparo operacional, o Neon e a correção de build para a Vercel. O [PR #25](https://github.com/daviduartedev/yousef-qrcode/pull/25) integrou o Lote 4 validado (#19–#24). As especificações pai #1 e #6 permanecem abertas intencionalmente.
 
 Os Lotes 1 e 2 tiveram validação humana local. A [homologação](https://yousef-xi.vercel.app/) recebeu aceite do proprietário em 11/11/2026 com base nos testes hospedados de cadastro, login, isolamento, logout e tracking. O proprietário dispensou a rodada manual hospedada de reabertura do design, PNG/SVG e leitura no celular.
 
@@ -22,12 +22,12 @@ Em 02/11/2026, o proprietário confirmou o início do zero, sem importar usuári
 
 R4 e R5 são independentes entre si. A ordem pode seguir a prioridade comercial. A meta atual é reproduzir as telas e os fluxos da Uniqode com a identidade do QRConnect. A [auditoria do trial](docs/referencias/auditoria-paridade-uniqode.md) registra a evidência, as lacunas e os pontos a verificar antes de detalhar cada lote.
 
-| Etapa | Estado em 11/11/2026 |
+| Etapa | Estado em 15/11/2026 |
 |---|---|
 | R0 | Banco de homologação provisionado e recuperação local aceita. Backup, retenção e restauração hospedada adiados no #12. |
 | R1 | Homologação Vercel + Neon aceita no #13 com evidência HTTP e dispensa da rodada manual. |
 | R2 | Editor entregue/validado; publicação e retorno operacional pendentes; ponte antiga dispensada. |
-| R3 | Painel e gestão do Lote 4 (#19–#24) aceitos pelo proprietário em 15/11/2026. A próxima fatia detalha a navegação e as operações de gestão. |
+| R3 | Painel e gestão do Lote 4 (#19–#24) aceitos e integrados. O [Lote 5](docs/lotes/05-gestao-avancada/spec.md) entrega navegação e gestão avançada, testadas localmente, com integração direta à `main` autorizada pelo proprietário. |
 | R4–R5 | Módulos publicados/persistidos ainda não entregues; abas/editor local herdados não os substituem. |
 | R6 | Superfícies principais mapeadas no trial. Regras e fluxos restritos a planos superiores precisam de evidência própria. |
 
@@ -47,6 +47,8 @@ A primeira fatia do R3 segue em homologação, na Vercel e no Neon já configura
 A paridade do site público e da entrada do R2 pode avançar em paralelo à gestão. Cada fatia compara os mesmos cenários nos dois produtos e testa o efeito das ações, além da aparência.
 
 ### Tickets propostos para a etapa 2
+
+Os tickets 2.1–2.7 compõem o [Lote 5](docs/lotes/05-gestao-avancada/spec.md), sobre a `main` atualizada com o Lote 4. O proprietário autorizou a integração direta após a entrega dos testes e do comparativo. A homologação usa a Vercel e o Neon já configurados.
 
 | Ticket proposto | Entrega verificável | Dependência |
 |---|---|---|
