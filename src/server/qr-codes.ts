@@ -10,6 +10,7 @@ import type { QRCodeRecord } from "@/lib/qr-types";
 import { qrDesignSchema, hasVisibleContrast } from "@/lib/qr-design";
 import { qrFilterDate, qrPageSize, type QRFilterRule, type QRListQuery } from "@/lib/qr-list";
 import { safeDestination } from "@/lib/qr-destination";
+import { lifecycleExpression } from "@/server/lifecycle";
 import { describeQRDestination, isStaticQRType, parseQRContent } from "@/lib/qr-content";
 
 export { safeDestination };
@@ -121,6 +122,7 @@ export async function listCodePage(userId: string, query: QRListQuery) {
     labelMatch,
     query.watch ? and(eq(qrCodes.trackingEnabled, true), eq(qrCodes.watched, query.watch === 'yes')) : undefined,
     ...query.rules.map(filterCondition),
+    query.lifecycle ? sql`${lifecycleExpression} = ${query.lifecycle}` : undefined,
   );
   const ordering = {
     newest: desc(qrCodes.createdAt),

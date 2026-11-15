@@ -18,21 +18,25 @@ const editHref = (id: string) => '/app?edit=' + encodeURIComponent(id);
 export default function Overview({ data }: { data: Awaited<ReturnType<typeof getQROverview>> }) {
   const { t: copy, i18n } = useTranslation('copy');
   const number = new Intl.NumberFormat(i18n.resolvedLanguage);
-  const { counts, scanHistory, recent, top } = data;
+  const { t: lifecycleCopy } = useTranslation('analytics');
+  const { counts, scanHistory, recent, top, lifecycle } = data;
   const statuses = [
-    { label: 'Active tracked codes', value: counts.active, color: 'bg-emerald-500', href: trackingList + '&status=active' },
-    { label: 'Inactive tracked codes', value: counts.inactive, color: 'bg-amber-500', href: trackingList + '&status=inactive' },
-    { label: 'Direct QR Codes', value: counts.total - counts.active - counts.inactive, color: 'bg-sky-500', href: '/my-qrcodes?mode=direct' },
+    { label: 'New', hint: 'Created in the last 7 days', value: lifecycle.new, color: 'bg-violet-500', href: '/my-qrcodes?lifecycle=new' },
+    { label: 'Active', hint: 'Scanned in the last 30 days', value: lifecycle.active, color: 'bg-emerald-500', href: '/my-qrcodes?lifecycle=active' },
+    { label: 'Declining', hint: 'Last 14 days below half of the 14 days before', value: lifecycle.declining, color: 'bg-orange-500', href: '/my-qrcodes?lifecycle=declining' },
+    { label: 'No scans', hint: 'No scans in the last 30 days', value: lifecycle.no_scans, color: 'bg-slate-400', href: '/my-qrcodes?lifecycle=no_scans' },
+    { label: 'Paused', hint: 'Tracking paused', value: lifecycle.paused, color: 'bg-amber-500', href: '/my-qrcodes?lifecycle=paused' },
+    { label: 'Direct QR Codes', hint: 'Direct and static codes have no scan data', value: counts.total - counts.active - counts.inactive, color: 'bg-sky-500', href: '/my-qrcodes?mode=direct' },
   ];
 
   return <WorkspaceShell>
     <main className="space-y-6 px-4 py-5 sm:px-6 sm:py-6 2xl:space-y-8 2xl:px-8">
       <h1 className="sr-only">{copy('Overview')}</h1>
-      <ul className="flex min-h-16 flex-wrap items-center gap-x-5 gap-y-1 rounded-md border bg-card px-3 py-2 text-sm text-muted-foreground sm:px-4">
-        {statuses.map(({ label, value, color, href }) => <li key={label}>
-          <Link href={href} className="inline-flex min-h-9 items-center gap-2 rounded-sm hover:text-foreground hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring">
+      <ul aria-label={lifecycleCopy('QR Code lifecycle')} className="flex min-h-16 flex-wrap items-center gap-x-5 gap-y-1 rounded-md border bg-card px-3 py-2 text-sm text-muted-foreground sm:px-4">
+        {statuses.map(({ label, hint, value, color, href }) => <li key={label}>
+          <Link href={href} title={lifecycleCopy(hint)} className="inline-flex min-h-9 items-center gap-2 rounded-sm hover:text-foreground hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring">
             <span className={`size-2 shrink-0 rounded-full ${color}`} aria-hidden="true" />
-            {copy(label)} ({number.format(value)})
+            {lifecycleCopy(label)} ({number.format(value)})
           </Link>
         </li>)}
       </ul>

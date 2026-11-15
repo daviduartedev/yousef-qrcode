@@ -6,6 +6,7 @@ import { qrCodes, qrScans } from '@/server/db/schema';
 import { getServerEnv } from '@/server/env';
 import { safeDestination } from '@/server/qr-codes';
 import { HttpError } from '@/server/http';
+import { duplicateWindowSeconds, isBotUserAgent } from '@/lib/qr-analytics';
 
 const noCache = { 'Cache-Control': 'no-store, max-age=0', 'X-Robots-Tag': 'noindex, nofollow' };
 const validCode = (code: string | null): code is string => Boolean(code && /^[A-Za-z0-9_-]{1,20}$/.test(code));
@@ -29,14 +30,24 @@ export async function scanAndRedirect(request: Request, record = true) {
       if (!safeDestination(qr.destinationUrl)) throw new HttpError(410, 'QR destination is unavailable');
       if (record) {
         const [{ count }] = await tx.select({ count: sql<number>`count(*)::int` }).from(qrScans)
-          .where(and(eq(qrScans.qrCodeId, qr.id), gte(qrScans.scannedAt, new Date(Date.now() - 60000))));
+          .where(and(eq(qrScans.qrCodeId, qr.id), gte(qrScans.scannedAt, sql`now() - interval '60 seconds'`)));
         if (count >= 300) throw new HttpError(429, 'Please try this QR code again shortly');
         const userAgent = (request.headers.get('user-agent') || '').slice(0, 1024);
         const env = getServerEnv();
         const forwarded = env.trustProxyHeaders ? request.headers.get('x-forwarded-for')?.split(',')[0].trim() : undefined;
+        const ipAddress = forwarded && isIP(forwarded) ? forwarded : null;
+        // Bots and immediate repeats from the same address and browser still redirect, but are not counted.
+        if (isBotUserAgent(userAgent)) return new URL(qr.destinationUrl).href;
+        if (ipAddress) {
+          const [{ repeats }] = await tx.select({ repeats: sql<number>`count(*)::int` }).from(qrScans).where(and(
+            eq(qrScans.qrCodeId, qr.id), eq(qrScans.ipAddress, ipAddress), eq(qrScans.userAgent, userAgent),
+            gte(qrScans.scannedAt, sql`now() - make_interval(secs => ${duplicateWindowSeconds})`),
+          ));
+          if (repeats > 0) return new URL(qr.destinationUrl).href;
+        }
         await tx.insert(qrScans).values({
           qrCodeId: qr.id, userAgent, ...deviceInfo(userAgent),
-          ipAddress: forwarded && isIP(forwarded) ? forwarded : null,
+          ipAddress,
           country: env.trustProxyHeaders ? request.headers.get('x-vercel-ip-country')?.slice(0, 100) : null,
           city: env.trustProxyHeaders ? request.headers.get('x-vercel-ip-city')?.slice(0, 100) : null,
         });

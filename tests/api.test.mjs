@@ -771,3 +771,148 @@ test("tracked QR destination changes keep the URL, scans and an owner-only histo
     cookie: owner, method: "PATCH", body: { destination_url: "https://example.test/other" },
   })).status, 409);
 });
+
+// Synthetic scan history is seeded directly in the disposable test database; behaviour is read through HTTP.
+async function withTestDatabase(callback) {
+  const { default: pg } = await import("pg");
+  const url = new URL(process.env.DATABASE_URL);
+  assert.ok(["localhost", "127.0.0.1"].includes(url.hostname) && url.pathname.startsWith("/qrconnect_test_"));
+  const pool = new pg.Pool({ connectionString: url.toString(), max: 1 });
+  try { return await callback(pool); } finally { await pool.end(); }
+}
+const utcDay = (offset) => new Date(Date.now() + offset * 86400000).toISOString().slice(0, 10);
+const at = (offset, hour) => `${utcDay(offset)}T${String(hour).padStart(2, "0")}:15:00Z`;
+
+test("bots and immediate repeats redirect without being counted", async () => {
+  const owner = await register();
+  const { qrCode, trackingUrl } = await createManagedCode(owner, "Counting rules", "https://example.test/count");
+  const trusted = process.env.TEST_TRUSTED_PROXY_BASE_URL;
+  assert.ok(trusted && new URL(trusted).hostname === "localhost");
+  const trustedUrl = new URL(new URL(trackingUrl).pathname + new URL(trackingUrl).search, trusted);
+  const scan = (agent, address) => fetch(trustedUrl, { redirect: "manual", headers: { "user-agent": agent, ...(address ? { "x-forwarded-for": address } : {}) } });
+  const phone = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_1 like Mac OS X) Mobile/15E148 Safari/604.1";
+  for (const response of [
+    await scan("Slackbot-LinkExpanding 1.0 (+https://api.slack.com/robots)", "203.0.113.5"),
+    await scan("WhatsApp/2.23.20.0 A"),
+    await scan(phone, "203.0.113.7"),
+    await scan(phone, "203.0.113.7"),
+    await scan(phone + " Chrome", "203.0.113.7"),
+    await scan(phone, "203.0.113.8"),
+  ]) {
+    assert.equal(response.status, 302);
+    assert.equal(response.headers.get("location"), "https://example.test/count");
+  }
+  const record = await (await request(`/api/qr-codes/${qrCode.id}`, { cookie: owner })).json();
+  assert.equal(record.qrCode.total_scans, 3);
+  const today = utcDay(0);
+  const analytics = await (await request(`/api/analytics?from=${today}&to=${today}&qr=${qrCode.id}`, { cookie: owner })).json();
+  assert.deepEqual(analytics.summary, { scans: 3, uniqueScanners: 3, scansWithoutAddress: 0 });
+});
+
+test("consolidated analytics match seeded totals, filters, previous period and export", async () => {
+  const owner = await register();
+  const stranger = await register();
+  const first = await createManagedCode(owner, '=HYPERLINK("http://evil.test")', "https://example.test/a");
+  const second = await createManagedCode(owner, "Second", "https://example.test/b");
+  const foreign = await createManagedCode(stranger, "Foreign", "https://example.test/foreign");
+  await withTestDatabase(async (db) => {
+    const insert = (qr, offset, hour, device, country, ip) => db.query(
+      "INSERT INTO qrconnect.qr_scans (qr_code_id, scanned_at, device_type, os, browser, country, ip_address, user_agent) VALUES ($1, $2, $3, 'iOS', 'Safari', $4, $5, 'Synthetic phone')",
+      [qr.qrCode.id, at(offset, hour), device, country, ip]);
+    // Current period: the last 10 UTC days. First QR: 5 scans, second: 2.
+    await insert(first, 0, 9, "mobile", "Brazil", "198.51.100.1");
+    await insert(first, -1, 9, "mobile", "Brazil", "198.51.100.1");
+    await insert(first, -3, 14, "mobile", "Brazil", "198.51.100.2");
+    await insert(first, -5, 14, "desktop", "United States", null);
+    await insert(first, -9, 23, "desktop", "United States", "198.51.100.3");
+    await insert(second, -2, 9, "tablet", "Brazil", "198.51.100.1");
+    await insert(second, -4, 9, "mobile", null, "198.51.100.4");
+    // Previous period: the 10 days before. First QR: 3 scans.
+    await insert(first, -10, 9, "mobile", "Brazil", "198.51.100.1");
+    await insert(first, -15, 9, "mobile", "Brazil", "198.51.100.9");
+    await insert(first, -19, 9, "desktop", "Brazil", null);
+    // Outside both periods and from another account.
+    await insert(first, -40, 9, "mobile", "Brazil", "198.51.100.1");
+    await insert(foreign, 0, 9, "mobile", "Brazil", "198.51.100.1");
+  });
+  const range = `from=${utcDay(-9)}&to=${utcDay(0)}`;
+  const read = async (query, cookie = owner) => {
+    const response = await request(`/api/analytics?${query}`, { cookie });
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get("cache-control"), /no-store/);
+    return response.json();
+  };
+  const all = await read(range);
+  assert.deepEqual(all.previous, { from: utcDay(-19), to: utcDay(-10) });
+  // Unique scanners are distinct address + browser pairs: .1, .2, .3 for the first QR and .1, .4 for the second share one pair.
+  assert.deepEqual(all.summary, { scans: 7, uniqueScanners: 4, scansWithoutAddress: 1 });
+  assert.deepEqual(all.previousSummary, { scans: 3, uniqueScanners: 2, scansWithoutAddress: 1 });
+  assert.equal(all.series.length, 10);
+  assert.equal(all.series.reduce((sum, day) => sum + day.scans, 0), 7);
+  assert.equal(all.series.reduce((sum, day) => sum + day.previous, 0), 3);
+  assert.deepEqual(all.series.at(-1), { day: utcDay(0), scans: 1, previous: 1 });
+  assert.deepEqual(all.byQr.map((row) => [row.id, row.scans]), [[first.qrCode.id, 5], [second.qrCode.id, 2]]);
+  assert.deepEqual(all.byDevice, { mobile: 4, desktop: 2, tablet: 1 });
+  assert.deepEqual(all.byCountry, { Brazil: 4, "United States": 2, Unknown: 1 });
+  assert.equal(all.byHour[9], 4);
+  assert.equal(all.byHour[14], 2);
+  assert.equal(all.byHour[23], 1);
+  assert.ok(!all.codes.some((code) => code.id === foreign.qrCode.id));
+
+  const one = await read(`${range}&qr=${first.qrCode.id}`);
+  assert.equal(one.summary.scans, 5);
+  assert.equal(one.previousSummary.scans, 3);
+  assert.equal((await read(`${range}&device=mobile`)).summary.scans, 4);
+  assert.equal((await read(`${range}&country=United%20States`)).summary.scans, 2);
+  assert.equal((await read(`${range}&device=desktop&country=Brazil`)).summary.scans, 0);
+
+  const isolated = await read(`${range}&qr=${first.qrCode.id}`, stranger);
+  assert.equal(isolated.summary.scans, 0);
+  assert.equal((await read(range, stranger)).summary.scans, 1);
+  assert.equal((await request(`/api/analytics?${range}`)).status, 401);
+  assert.equal((await request(`/api/analytics/export?${range}`)).status, 401);
+
+  const exported = await request(`/api/analytics/export?${range}`, { cookie: owner });
+  assert.equal(exported.status, 200);
+  assert.match(exported.headers.get("content-type"), /text\/csv/);
+  assert.match(exported.headers.get("content-disposition"), /attachment; filename="qrconnect-scans-/);
+  const lines = (await exported.text()).replace(/^﻿/, "").trim().split("\r\n");
+  assert.equal(lines[0], "date_utc,qr_name,short_code,scans,unique_scanners,scans_without_address");
+  assert.equal(lines.length - 1, 7);
+  assert.equal(lines.slice(1).reduce((sum, line) => sum + Number(line.split(",").at(-3)), 0), 7);
+  assert.ok(lines.some((line) => line.includes(`"'=HYPERLINK(""http://evil.test"")"`)));
+  assert.ok(!lines.some((line) => line.includes(foreign.qrCode.short_code)));
+
+  const page = await request(`/analytics?${range}`, { cookie: owner });
+  assert.equal(page.status, 200);
+  assert.equal((await request("/analytics")).status, 307);
+});
+
+test("lifecycle states classify tracked codes and filter the list", async () => {
+  const owner = await register();
+  const stranger = await register();
+  const make = (title) => createManagedCode(owner, title, "https://example.test/" + title);
+  const [, steady, declining, quiet, paused] = await Promise.all(["fresh", "steady", "declining", "quiet", "paused"].map(make));
+  await createManagedCode(owner, "direct", "https://example.test/direct", false);
+  await createManagedCode(stranger, "foreign declining", "https://example.test/foreign");
+  await withTestDatabase(async (db) => {
+    const old = new Date(Date.now() - 40 * 86400000).toISOString();
+    for (const qr of [steady, declining, quiet, paused])
+      await db.query("UPDATE qrconnect.qr_codes SET created_at = $2 WHERE id = $1", [qr.qrCode.id, old]);
+    const scan = (qr, daysAgo) => db.query("INSERT INTO qrconnect.qr_scans (qr_code_id, scanned_at) VALUES ($1, now() - make_interval(days => $2))", [qr.qrCode.id, daysAgo]);
+    await scan(steady, 2);
+    for (let index = 0; index < 5; index++) await scan(declining, 20);
+    await scan(declining, 3);
+    await scan(quiet, 35);
+  });
+  assert.equal((await request(`/api/qr-codes/${paused.qrCode.id}`, { cookie: owner, method: "PATCH", body: { is_active: false } })).status, 200);
+  const list = async (state) => (await (await request(`/api/qr-codes?lifecycle=${state}`, { cookie: owner })).json()).qrCodes.map((qr) => qr.title);
+  assert.deepEqual(await list("new"), ["fresh"]);
+  assert.deepEqual(await list("active"), ["steady"]);
+  assert.deepEqual(await list("declining"), ["declining"]);
+  assert.deepEqual(await list("no_scans"), ["quiet"]);
+  assert.deepEqual(await list("paused"), ["paused"]);
+  const overview = await (await request("/overview", { cookie: owner })).text();
+  for (const [label, count] of [["New", 1], ["Active", 1], ["Declining", 1], ["No scans", 1], ["Paused", 1], ["Direct QR Codes", 1]])
+    assert.match(overview, new RegExp(`>${label}<!-- --> \\(<!-- -->${count}<!-- -->\\)`), label);
+});

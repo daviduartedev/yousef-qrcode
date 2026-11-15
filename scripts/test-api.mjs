@@ -16,46 +16,57 @@ if (!/^qrconnect_test_[a-f0-9]{32}$/.test(database)) throw new Error('Invalid te
 const connection = new URL(original);
 connection.pathname = '/' + database;
 const admin = new Pool({ connectionString: original.toString(), max: 1 });
-const port = await new Promise((resolve, reject) => {
+const freePort = () => new Promise((resolve, reject) => {
   const socket = createServer();
   socket.on('error', reject);
   socket.listen(0, '127.0.0.1', () => { const value = socket.address().port; socket.close(() => resolve(value)); });
 });
+const port = await freePort();
+const trustedPort = await freePort();
 const base = `http://localhost:${port}`;
-const env = { ...process.env, DATABASE_URL: connection.toString(), DATABASE_MIGRATION_URL: connection.toString(), APP_URL: base, TEST_BASE_URL: base, NEXT_TELEMETRY_DISABLED: '1' };
-let server;
+// A second server trusts X-Forwarded-For, as behind a proxy that overwrites it. Only scan-counting tests use it,
+// because trusted addresses also enable per-address auth rate limits for the rest of the suite.
+const trustedBase = `http://localhost:${trustedPort}`;
+const env = { ...process.env, DATABASE_URL: connection.toString(), DATABASE_MIGRATION_URL: connection.toString(), APP_URL: base, TEST_BASE_URL: base, TEST_TRUSTED_PROXY_BASE_URL: trustedBase, NEXT_TELEMETRY_DISABLED: '1' };
+const servers = [];
 let created = false;
 let output = '';
 async function run(args) {
   const child = spawn(process.execPath, args, { env, stdio: 'inherit', windowsHide: true });
   return new Promise((resolve, reject) => { child.on('error', reject); child.on('exit', code => resolve(code ?? 1)); });
 }
-try {
-  await admin.query(`CREATE DATABASE "${database}"`);
-  created = true;
-  if (await run(['--import', 'tsx', 'scripts/migrate.ts'])) throw new Error('Test migrations failed');
-  server = spawn(process.execPath, ['node_modules/next/dist/bin/next', 'start', '--hostname', 'localhost', '--port', String(port)], { env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+async function start(serverPort, origin, extra = {}) {
+  const server = spawn(process.execPath, ['node_modules/next/dist/bin/next', 'start', '--hostname', 'localhost', '--port', String(serverPort)],
+    { env: { ...env, APP_URL: origin, ...extra }, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+  servers.push(server);
   server.stdout.on('data', value => { output = (output + value).slice(-10000); });
   server.stderr.on('data', value => { output = (output + value).slice(-10000); });
   server.on('error', () => {});
   const deadline = Date.now() + 60000;
-  let ready = false;
   while (Date.now() < deadline) {
     if (server.exitCode !== null) break;
-    try { const response = await fetch(base); if (response.ok) { ready = true; break; } } catch { /* wait for readiness */ }
+    try { const response = await fetch(origin); if (response.ok) return; } catch { /* wait for readiness */ }
     await new Promise(resolve => setTimeout(resolve, 250));
   }
-  if (!ready) throw new Error('Test server did not become ready. Run npm run build first.');
+  throw new Error('Test server did not become ready. Run npm run build first.');
+}
+try {
+  await admin.query(`CREATE DATABASE "${database}"`);
+  created = true;
+  if (await run(['--import', 'tsx', 'scripts/migrate.ts'])) throw new Error('Test migrations failed');
+  await Promise.all([start(port, base, { TRUST_PROXY_HEADERS: 'false' }), start(trustedPort, trustedBase, { TRUST_PROXY_HEADERS: 'true' })]);
   console.log('Running HTTP integration tests against a disposable local Postgres database.');
   process.exitCode = await run(['--test', ...(process.env.TEST_NAME_PATTERN ? ['--test-name-pattern', process.env.TEST_NAME_PATTERN] : []), 'tests/api.test.mjs']);
 } catch {
   console.error('API tests could not run. Check the local database and run npm run build first. Private details hidden.');
   process.exitCode = 1;
 } finally {
-  if (server && server.exitCode === null) {
-    const stopped = new Promise(resolve => server.once('exit', resolve));
-    server.kill();
-    await stopped;
+  for (const server of servers) {
+    if (server.exitCode === null) {
+      const stopped = new Promise(resolve => server.once('exit', resolve));
+      server.kill();
+      await stopped;
+    }
   }
   if (created) await admin.query(`DROP DATABASE "${database}" WITH (FORCE)`);
   await admin.end();

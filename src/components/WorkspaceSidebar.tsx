@@ -1,6 +1,6 @@
 'use client';
 
-import { ChevronDown, CircleHelp, LayoutDashboard, PanelLeftClose, PanelLeftOpen, Plus, QrCode } from 'lucide-react';
+import { BarChart3, ChevronDown, CircleHelp, LayoutDashboard, PanelLeftClose, PanelLeftOpen, Plus, QrCode } from 'lucide-react';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { useId, useState, type MouseEvent } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -76,6 +76,8 @@ export function WorkspaceNavigation({ id, collapsed = false, onFollow }: {
           })}
         </ul>
       </div>}
+    {item('/analytics', 'Analytics', BarChart3, pathname === '/analytics',
+      row + iconOnly + (pathname === '/analytics' ? ' bg-background' : ''))}
     {item('/app#how-to-create', 'QR Code guide', CircleHelp, false, row + iconOnly + ' mt-2')}
   </nav>;
 }

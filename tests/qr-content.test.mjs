@@ -86,10 +86,12 @@ test('legacy types map to website and Wi-Fi lists hide the password', () => {
   assert.equal(describeQRDestination({ qr_type: 'wifi', destination_url: 'WIFI:...', content }), 'Wi-Fi · Office');
 });
 
-test('creation copy has the same keys in English and Arabic', async () => {
+test('new copy namespaces have the same keys in English and Arabic', async () => {
   const { readFile } = await import('node:fs/promises');
-  const en = JSON.parse(await readFile(new URL('../src/locales/creation.en.json', import.meta.url), 'utf8'));
-  const ar = JSON.parse(await readFile(new URL('../src/locales/creation.ar.json', import.meta.url), 'utf8'));
-  assert.deepEqual(Object.keys(ar).sort(), Object.keys(en).sort());
-  for (const [key, value] of Object.entries(ar)) assert.ok(value.trim(), `Arabic copy for ${key}`);
+  for (const name of ['creation', 'analytics']) {
+    const en = JSON.parse(await readFile(new URL(`../src/locales/${name}.en.json`, import.meta.url), 'utf8'));
+    const ar = JSON.parse(await readFile(new URL(`../src/locales/${name}.ar.json`, import.meta.url), 'utf8'));
+    assert.deepEqual(Object.keys(ar).sort(), Object.keys(en).sort(), name);
+    for (const [key, value] of Object.entries(ar)) assert.ok(value.trim(), `Arabic ${name} copy for ${key}`);
+  }
 });
