@@ -15,7 +15,8 @@ export async function requireApiUser(request: Request) {
 export function requireSameOrigin(request: Request) {
   if (request.headers.get('origin') !== getServerEnv().appUrl) throw new HttpError(403, 'Request origin is not allowed');
 }
-export async function readJson(request: Request) {
+/** Streams the JSON body and stops at `limit` bytes, whether or not Content-Length was sent. */
+export async function readJson(request: Request, limit = 8192) {
   if (!request.headers.get('content-type')?.toLowerCase().startsWith('application/json')) throw new HttpError(415, 'JSON content required');
   const reader = request.body?.getReader();
   if (!reader) throw new HttpError(400, 'JSON body required');
@@ -25,7 +26,7 @@ export async function readJson(request: Request) {
     const { done, value } = await reader.read();
     if (done) break;
     size += value.byteLength;
-    if (size > 8192) { await reader.cancel(); throw new HttpError(413, 'Request body is too large'); }
+    if (size > limit) { await reader.cancel(); throw new HttpError(413, 'Request body is too large'); }
     chunks.push(value);
   }
   try { return JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown; }

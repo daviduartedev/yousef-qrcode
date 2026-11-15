@@ -164,3 +164,46 @@ export const assets = appSchema.table('assets', {
   unique('assets_user_id_unique').on(table.userId, table.id),
   foreignKey({ columns: [table.userId, table.folderId], foreignColumns: [assetFolders.userId, assetFolders.id] }),
 ]).enableRLS();
+
+/** A Linkpage keeps a private draft and the last published copy; the public URL is `/p/<slug>`. */
+export const linkPages = appSchema.table('link_pages', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  slug: varchar('slug', { length: 40 }).notNull().unique(),
+  title: varchar('title', { length: 80 }).notNull(),
+  template: varchar('template', { length: 32 }).notNull(),
+  creationKey: uuid('creation_key').notNull(),
+  draft: jsonb('draft').notNull(),
+  published: jsonb('published'),
+  isPublished: boolean('is_published').default(false).notNull(),
+  publishedAt: timestamp('published_at', { withTimezone: true }),
+  qrCodeId: uuid('qr_code_id').references(() => qrCodes.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, table => [
+  unique('link_pages_user_creation_key_unique').on(table.userId, table.creationKey),
+  index('link_pages_user_updated_idx').on(table.userId, table.updatedAt),
+]).enableRLS();
+
+/** Public views and link clicks; bots and immediate repeats are not stored. */
+export const linkPageEvents = appSchema.table('link_page_events', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  pageId: uuid('page_id').notNull().references(() => linkPages.id, { onDelete: 'cascade' }),
+  kind: varchar('kind', { length: 8 }).notNull(),
+  blockId: varchar('block_id', { length: 24 }),
+  occurredAt: timestamp('occurred_at', { withTimezone: true }).defaultNow().notNull(),
+  deviceType: varchar('device_type', { length: 16 }).notNull(),
+  os: varchar('os', { length: 32 }).notNull(),
+  browser: varchar('browser', { length: 32 }).notNull(),
+  country: varchar('country', { length: 100 }),
+  ipAddress: varchar('ip_address', { length: 64 }),
+  userAgent: varchar('user_agent', { length: 1024 }).notNull(),
+}, table => [index('link_page_events_page_time_idx').on(table.pageId, table.occurredAt)]).enableRLS();
+
+/** Every public address ever used, per kind. Addresses are never released to another account, so printed QR codes cannot be taken over. */
+export const publicSlugs = appSchema.table('public_slugs', {
+  kind: varchar('kind', { length: 16 }).notNull(),
+  slug: varchar('slug', { length: 40 }).notNull(),
+  userId: uuid('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, table => [primaryKey({ columns: [table.kind, table.slug] })]).enableRLS();
