@@ -126,7 +126,7 @@ export async function publishCard(userId: string, cardId: string, publish: boole
     await assertMedia(userId, draft.data);
   }
   const [updated] = await getDb().update(cards).set(publish
-    ? { published: row.draft, isPublished: true, publishedAt: new Date(), updatedAt: new Date() }
+    ? { published: sql`draft`, isPublished: true, publishedAt: new Date(), updatedAt: new Date() }
     : { isPublished: false, updatedAt: new Date() })
     .where(and(eq(cards.userId, userId), eq(cards.id, cardId))).returning();
   return record(updated);
