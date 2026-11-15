@@ -29,6 +29,8 @@ import enDevelopers from './locales/developers.en.json';
 import arDevelopers from './locales/developers.ar.json';
 import enIntegrations from './locales/integrations.en.json';
 import arIntegrations from './locales/integrations.ar.json';
+import enAi from './locales/ai.en.json';
+import arAi from './locales/ai.ar.json';
 
 i18n
   .use(initReactI18next)
@@ -49,6 +51,7 @@ i18n
         advanced: enAdvanced,
         developers: enDevelopers,
         integrations: enIntegrations,
+        ai: enAi,
       },
       ar: {
         translation: arTranslations,
@@ -65,6 +68,7 @@ i18n
         advanced: arAdvanced,
         developers: arDevelopers,
         integrations: arIntegrations,
+        ai: arAi,
       },
     },
     lng: 'en',

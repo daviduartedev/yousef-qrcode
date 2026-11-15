@@ -447,3 +447,32 @@ export const webhookDeliveries = appSchema.table('webhook_deliveries', {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   deliveredAt: timestamp('delivered_at', { withTimezone: true }),
 }, table => [index('webhook_deliveries_hook_created_idx').on(table.webhookId, table.createdAt), index('webhook_deliveries_due_idx').on(table.status, table.nextAttemptAt)]).enableRLS();
+
+/** Text the assisted creation may draw facts from; private to the workspace. */
+export const aiSources = appSchema.table('ai_sources', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+  title: varchar('title', { length: 80 }).notNull(),
+  content: text('content').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, table => [index('ai_sources_user_idx').on(table.userId)]).enableRLS();
+
+/** Each request to the assistant: the review queue, the usage quota and the cost estimate. */
+export const aiGenerations = appSchema.table('ai_generations', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+  createdBy: uuid('created_by').references(() => user.id, { onDelete: 'set null' }),
+  kind: varchar('kind', { length: 16 }).notNull(),
+  prompt: text('prompt').notNull(),
+  status: varchar('status', { length: 16 }).notNull(),
+  error: varchar('error', { length: 200 }),
+  output: jsonb('output'),
+  dropped: integer('dropped').default(0).notNull(),
+  inputTokens: integer('input_tokens').default(0).notNull(),
+  outputTokens: integer('output_tokens').default(0).notNull(),
+  costMicros: integer('cost_micros').default(0).notNull(),
+  targetId: uuid('target_id'),
+  reviewedBy: uuid('reviewed_by').references(() => user.id, { onDelete: 'set null' }),
+  reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, table => [index('ai_generations_user_created_idx').on(table.userId, table.createdAt)]).enableRLS();

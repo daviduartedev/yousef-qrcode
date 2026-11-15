@@ -48,11 +48,12 @@ export async function getForm(userId: string, formId: string) { return record(aw
 const createInput = z.object({ template: z.string(), creation_key: z.uuid() }).strict();
 
 /** Same key, same form: double clicks and retries never create two drafts. */
-export async function createForm(userId: string, input: unknown) {
+/** `draft` is set only by reviewed assisted creation; requests from people always start from a template. */
+export async function createForm(userId: string, input: unknown, draft?: FormContent) {
   const parsed = createInput.safeParse(input);
   const template = parsed.success ? formTemplates.find(item => item.id === parsed.data.template) : undefined;
   if (!parsed.success || !template) throw new HttpError(400, 'Choose a valid template');
-  const content = template.content();
+  const content = draft ?? template.content();
   return getDb().transaction(async tx => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${'forms:' + userId}))`);
     const [existing] = await tx.select().from(forms).where(and(eq(forms.userId, userId), eq(forms.creationKey, parsed.data.creation_key)));

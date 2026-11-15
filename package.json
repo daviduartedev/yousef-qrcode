@@ -8,7 +8,7 @@
   },
   "scripts": {
     "test:security": "node --test tests/security.test.mjs",
-    "test:unit": "node --import tsx --test tests/qr-content.test.mjs tests/qr-analytics.test.mjs tests/auth-paths.test.mjs tests/assets.test.mjs tests/cards.test.mjs tests/forms.test.mjs tests/qr-rules.test.mjs tests/developers.test.mjs tests/integrations.test.mjs",
+    "test:unit": "node --import tsx --test tests/qr-content.test.mjs tests/qr-analytics.test.mjs tests/auth-paths.test.mjs tests/assets.test.mjs tests/cards.test.mjs tests/forms.test.mjs tests/qr-rules.test.mjs tests/developers.test.mjs tests/integrations.test.mjs tests/ai.test.mjs",
     "check:secrets": "node scripts/check-secrets.mjs",
     "prepare": "node scripts/install-hooks.mjs",
     "dev": "next dev",
@@ -29,6 +29,7 @@
     "test": "npm run test:security && npm run test:unit && npm run test:ops && npm run test:api"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.8.0",
     "@better-auth/drizzle-adapter": "1.7.15",
     "@neon/config": "^1.14.0",
     "@neon/env": "^2.1.3",

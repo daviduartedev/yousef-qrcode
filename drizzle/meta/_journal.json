@@ -113,6 +113,13 @@
       "when": 1794770611804,
       "tag": "0015_integrations",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1794771744531,
+      "tag": "0016_assisted_creation",
+      "breakpoints": true
     }
   ]
 }

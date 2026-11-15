@@ -36,7 +36,7 @@ const base = `http://localhost:${port}`;
 // because trusted addresses also enable per-address auth rate limits for the rest of the suite.
 const trustedBase = `http://localhost:${trustedPort}`;
 const env = { ...process.env, DATABASE_URL: connection.toString(), DATABASE_MIGRATION_URL: connection.toString(), APP_URL: base, TEST_BASE_URL: base, TEST_TRUSTED_PROXY_BASE_URL: trustedBase, NEXT_TELEMETRY_DISABLED: '1',
-  EMAIL_TRANSPORT: 'outbox', EMAIL_OUTBOX_DIR: outbox, TEST_EMAIL_OUTBOX_DIR: outbox, DNS_TXT_FIXTURES: dnsFixtures, TEST_DNS_FIXTURES: dnsFixtures, WEBHOOK_ALLOW_LOOPBACK: 'true',
+  EMAIL_TRANSPORT: 'outbox', EMAIL_OUTBOX_DIR: outbox, TEST_EMAIL_OUTBOX_DIR: outbox, DNS_TXT_FIXTURES: dnsFixtures, TEST_DNS_FIXTURES: dnsFixtures, WEBHOOK_ALLOW_LOOPBACK: 'true', AI_PROVIDER: 'fixture',
   INTEGRATION_TEST_ORIGIN: `http://127.0.0.1:${integrationPort}`, TEST_INTEGRATION_PORT: String(integrationPort) };
 const servers = [];
 let created = false;

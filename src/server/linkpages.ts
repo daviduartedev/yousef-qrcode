@@ -49,7 +49,8 @@ export async function getLinkpage(userId: string, pageId: string) { return recor
 const createInput = z.object({ template: z.string(), creation_key: z.uuid(), title: z.string().trim().min(1).max(80).optional() }).strict();
 
 /** Creating twice with the same key returns the first page, so a double click never makes two drafts. */
-export async function createLinkpage(userId: string, input: unknown) {
+/** `draft` is set only by reviewed assisted creation; requests from people always start from a template. */
+export async function createLinkpage(userId: string, input: unknown, draft?: LinkpageContent) {
   const parsed = createInput.safeParse(input);
   const template = parsed.success ? linkpageTemplates.find(item => item.id === parsed.data.template) : undefined;
   if (!parsed.success || !template) throw new HttpError(400, 'Choose a valid template');
@@ -67,7 +68,7 @@ export async function createLinkpage(userId: string, input: unknown) {
       if (!(await slugFree(tx, 'linkpage', slug, userId))) continue;
       await claimSlug(tx, 'linkpage', slug, userId);
       const [row] = await tx.insert(linkPages).values({
-        userId, slug, title, template: template.id, creationKey: parsed.data.creation_key, draft: template.content(),
+        userId, slug, title, template: template.id, creationKey: parsed.data.creation_key, draft: draft ?? template.content(),
       }).returning();
       return { page: record(row), created: true };
     }

@@ -2105,3 +2105,54 @@ test("integrations deliver to Slack, HubSpot and GA4 with their own credentials 
     await connector.close();
   }
 });
+
+test("assisted creation drafts wait for review, respect sources and limits, and stay in the workspace", async () => {
+  const owner = await register();
+  const other = await register();
+  assert.equal((await request("/api/ai/generations", { method: "POST", cookie: owner, body: { kind: "linkpage", prompt: "" } })).status, 400);
+  const source = await request("/api/ai/sources", { method: "POST", cookie: owner, body: { title: "Menu", content: "Espresso 5, cappuccino 8." } });
+  assert.equal(source.status, 201);
+  const sourceId = (await source.json()).source.id;
+  assert.equal((await (await request("/api/ai/sources", { cookie: other })).json()).sources.length, 0);
+  assert.equal((await request("/api/ai/generations", { method: "POST", cookie: other, body: { kind: "linkpage", prompt: "Café page", source_ids: [sourceId] } })).status, 404, "sources of another workspace cannot be used");
+
+  const created = await request("/api/ai/generations", { method: "POST", cookie: owner, body: { kind: "linkpage", prompt: "Café page", source_ids: [sourceId] } });
+  assert.equal(created.status, 201);
+  const generation = (await created.json()).generation;
+  assert.equal(generation.status, "pending_review");
+  assert.equal(generation.dropped, 1, "the javascript: link is left out");
+  assert.ok(generation.preview.blocks.every((block) => block.type !== "link" || block.url.startsWith("https://")));
+  assert.ok(generation.cost_micros > 0);
+  assert.equal((await (await request("/api/linkpages", { cookie: owner })).json()).linkpages.length, 0, "nothing is created before review");
+
+  assert.equal((await request(`/api/ai/generations/${generation.id}`, { method: "POST", cookie: other, body: { decision: "approve" } })).status, 404);
+  const approved = await (await request(`/api/ai/generations/${generation.id}`, { method: "POST", cookie: owner, body: { decision: "approve" } })).json();
+  assert.equal(approved.generation.status, "approved");
+  const page = await (await request(`/api/linkpages/${approved.generation.target_id}`, { cookie: owner })).json();
+  assert.equal(page.linkpage.published, null, "approval creates an unpublished draft");
+  assert.equal(page.linkpage.draft.profile.name, "Café Aurora");
+  assert.equal((await request(`/api/ai/generations/${generation.id}`, { method: "POST", cookie: owner, body: { decision: "reject" } })).status, 409, "a draft is reviewed once");
+
+  const form = await (await request("/api/ai/generations", { method: "POST", cookie: owner, body: { kind: "form", prompt: "Event registration" } })).json();
+  assert.equal(form.generation.preview.consent.enabled, true);
+  assert.deepEqual(form.generation.preview.fields.map((field) => field.label), ["Full name", "Email", "Ticket"]);
+  const rejected = await (await request(`/api/ai/generations/${form.generation.id}`, { method: "POST", cookie: owner, body: { decision: "reject" } })).json();
+  assert.equal(rejected.generation.status, "rejected");
+  assert.equal(rejected.generation.target_id, null);
+
+  const failed = await request("/api/ai/generations", { method: "POST", cookie: owner, body: { kind: "form", prompt: "[fail] please" } });
+  assert.equal(failed.status, 502);
+  const listed = await (await request("/api/ai/generations", { cookie: owner })).json();
+  assert.equal(listed.generations.find((item) => item.status === "failed").error, "The assistant could not write a draft. Try again.");
+  assert.equal(listed.usage.day, 3, "failed requests count toward the limit");
+  assert.equal((await (await request("/api/ai/generations", { cookie: other })).json()).generations.length, 0);
+
+  let limited = null;
+  for (let index = 0; index < 20 && !limited; index++) {
+    const response = await request("/api/ai/generations", { method: "POST", cookie: owner, body: { kind: "form", prompt: `Survey ${index}` } });
+    if (response.status === 429) limited = response;
+  }
+  assert.ok(limited, "the daily limit stops further requests");
+  assert.equal((await request(`/api/ai/sources/${sourceId}`, { method: "DELETE", cookie: other })).status, 404);
+  assert.equal((await request(`/api/ai/sources/${sourceId}`, { method: "DELETE", cookie: owner })).status, 200);
+});
