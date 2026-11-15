@@ -1,5 +1,5 @@
 import 'server-only';
-import { HttpError } from '@/server/http';
+import { HttpError, readJson } from '@/server/http';
 import { authenticateApi, type ApiCaller } from '@/server/api-keys';
 import type { ApiScope } from '@/lib/developers';
 
@@ -25,8 +25,6 @@ export async function publicApi(request: Request, scope: ApiScope, handler: (cal
 }
 
 /** Reads a JSON body of at most 16 KB. */
-export async function readApiJson(request: Request) {
-  const text = await request.text();
-  if (text.length > 16 * 1024) throw new HttpError(413, 'Request body is too large');
-  try { return JSON.parse(text) as unknown; } catch { throw new HttpError(400, 'Invalid JSON body'); }
+export function readApiJson(request: Request) {
+  return readJson(request, 16 * 1024);
 }

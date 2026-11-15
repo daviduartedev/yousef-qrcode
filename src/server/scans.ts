@@ -154,15 +154,17 @@ export async function unlockScan(request: Request, input: unknown) {
   if (closed) return { destination: closed.location };
   const previewRules = (preview.rules ?? {}) as StoredRules;
   if (previewRules.passwordHash) await checkPassword(preview.id, visitor.ipAddress, previewRules, parsed.data.password);
-  return getDb().transaction(async tx => {
+  const result = await getDb().transaction(async tx => {
     const qr = await usable(tx, appHost, parsed.data.code);
     const scheduled = scheduleOutcome(qr);
     if (scheduled?.kind === 'closed') throw new HttpError(410, scheduled.reason);
-    if (scheduled) return { destination: scheduled.location };
+    if (scheduled) return { destination: scheduled.location, scan: null };
     const rules = (qr.rules ?? {}) as StoredRules;
     // The password may have changed between the check and the lock.
     if (rules.passwordHash !== previewRules.passwordHash) throw new HttpError(409, 'The QR code changed. Try again.');
-    announce(await recordScan(tx, request, qr, rules.askLocation ? parsed.data.location : undefined));
-    return { destination: new URL(qr.destinationUrl).href };
+    const scan = await recordScan(tx, request, qr, rules.askLocation ? parsed.data.location : undefined);
+    return { destination: new URL(qr.destinationUrl).href, scan };
   });
+  announce(result.scan);
+  return { destination: result.destination };
 }

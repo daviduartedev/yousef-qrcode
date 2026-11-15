@@ -30,7 +30,7 @@ export async function createKey(workspaceId: string, createdBy: string, input: u
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${'api-keys:' + workspaceId}))`);
     const [{ total }] = await tx.select({ total: sql<number>`count(*)::int` }).from(apiKeys).where(and(eq(apiKeys.userId, workspaceId), isNull(apiKeys.revokedAt)));
     if (total >= apiLimits.keysPerWorkspace) throw new HttpError(409, 'You reached the API key limit. Revoke a key to create another.');
-    const prefix = randomBytes(9).toString('base64url').toLowerCase().replace(/[^a-z0-9]/g, '').padEnd(12, '0').slice(0, 12);
+    const prefix = randomBytes(6).toString('hex');
     const secret = randomBytes(32).toString('base64url');
     const key = `qrc_${prefix}_${secret}`;
     const [row] = await tx.insert(apiKeys).values({ userId: workspaceId, name: parsed.data.name, prefix, keyHash: hash(key), scopes: [...new Set(parsed.data.scopes)], createdBy }).returning();

@@ -3,7 +3,7 @@ import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, 
 import { lookup } from 'node:dns/promises';
 import { request as httpsRequest } from 'node:https';
 import { request as httpRequest } from 'node:http';
-import { and, desc, eq, lte, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, lte, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { getDb } from '@/server/db';
 import { webhookDeliveries, webhooks } from '@/server/db/schema';
@@ -43,7 +43,7 @@ async function resolveTarget(value: string) {
   try { url = new URL(value); } catch { throw new HttpError(400, 'Enter a valid HTTPS address'); }
   const local = loopbackTests() && url.protocol === 'http:' && ['127.0.0.1', 'localhost'].includes(url.hostname);
   if ((url.protocol !== 'https:' && !local) || url.username || url.password) throw new HttpError(400, 'Enter a valid HTTPS address');
-  const addresses = await lookup(url.hostname, { all: true }).catch(() => []);
+  const addresses = await Promise.race([lookup(url.hostname, { all: true }), new Promise<never>((_, reject) => setTimeout(() => reject(new Error('DNS timeout')), 3000))]).catch(() => []);
   if (!addresses.length) throw new HttpError(400, 'The address could not be resolved');
   if (!local && addresses.some(item => blockedAddress(item.address))) throw new HttpError(400, 'Webhooks cannot reach private network addresses');
   return { url, address: addresses[0].address, family: addresses[0].family };
@@ -59,8 +59,10 @@ function post(target: Awaited<ReturnType<typeof resolveTarget>>, headers: Record
       lookup: (_hostname, _options, callback) => callback(null, target.address, target.family),
       timeout: apiLimits.timeoutMs,
     }, response => { response.resume(); response.on('end', () => resolve(response.statusCode ?? 0)); });
+    const deadline = setTimeout(() => req.destroy(new Error('Timed out')), apiLimits.timeoutMs);
     req.on('timeout', () => req.destroy(new Error('Timed out')));
     req.on('error', reject);
+    req.on('close', () => clearTimeout(deadline));
     req.end(body);
   });
 }
@@ -72,13 +74,18 @@ function post(target: Awaited<ReturnType<typeof resolveTarget>>, headers: Record
 export async function attemptDelivery(deliveryId: string) {
   const db = getDb();
   // Claim the attempt so two workers never send the same delivery at once.
-  const claimed = await db.update(webhookDeliveries).set({ nextAttemptAt: sql`now() + interval '2 minutes'` })
+  const [claim] = await db.update(webhookDeliveries).set({ nextAttemptAt: sql`now() + interval '2 minutes'`, attempts: sql`${webhookDeliveries.attempts} + 1` })
     .where(and(eq(webhookDeliveries.id, deliveryId), eq(webhookDeliveries.status, 'pending'), lte(webhookDeliveries.nextAttemptAt, sql`now()`)))
-    .returning({ id: webhookDeliveries.id });
-  if (!claimed.length) return;
+    .returning({ attempts: webhookDeliveries.attempts });
+  if (!claim) return;
   const [row] = await db.select({ delivery: webhookDeliveries, hook: webhooks }).from(webhookDeliveries)
     .innerJoin(webhooks, eq(webhooks.id, webhookDeliveries.webhookId)).where(eq(webhookDeliveries.id, deliveryId));
-  if (!row || row.delivery.status === 'delivered') return;
+  if (!row) return;
+  const attempts = claim.attempts;
+  const finish = (values: Parameters<ReturnType<typeof db.update<typeof webhookDeliveries>>["set"]>[0]) => db.update(webhookDeliveries).set(values)
+    .where(and(eq(webhookDeliveries.id, deliveryId), eq(webhookDeliveries.attempts, attempts), eq(webhookDeliveries.status, 'pending')));
+  // A paused webhook stops receiving events, retries included; an explicit test event still goes out.
+  if (!row.hook.active && row.delivery.event !== 'ping') { await finish({ status: 'failed', lastError: 'Webhook paused', nextAttemptAt: null }); return; }
   const body = JSON.stringify({ id: row.delivery.eventId, type: row.delivery.event, created_at: row.delivery.createdAt.toISOString(), data: row.delivery.payload });
   const timestamp = Math.floor(Date.now() / 1000);
   let statusCode: number | null = null;
@@ -89,22 +96,26 @@ export async function attemptDelivery(deliveryId: string) {
   } catch (cause) {
     error = cause instanceof HttpError ? cause.message : 'Connection failed';
   }
-  const attempts = row.delivery.attempts + 1;
   const delivered = statusCode !== null && statusCode >= 200 && statusCode < 300;
   const exhausted = attempts >= apiLimits.maxAttempts;
-  await db.update(webhookDeliveries).set({
-    attempts, lastStatusCode: statusCode, lastError: delivered ? null : (error ?? `Receiver answered ${statusCode}`).slice(0, 200),
+  await finish({
+    lastStatusCode: statusCode, lastError: delivered ? null : (error ?? `Receiver answered ${statusCode}`).slice(0, 200),
     status: delivered ? 'delivered' : exhausted ? 'failed' : 'pending',
     deliveredAt: delivered ? sql`now()` : null,
     nextAttemptAt: delivered || exhausted ? null : sql`now() + make_interval(secs => ${retryDelaysSeconds[Math.min(attempts - 1, retryDelaysSeconds.length - 1)]})`,
-  }).where(eq(webhookDeliveries.id, deliveryId));
+  });
 }
 
 /** Queues an event for every active webhook of the workspace that subscribes to it, then tries them after the response. */
 export async function emitEvent(workspaceId: string, event: WebhookEvent, data: Record<string, unknown>) {
   const hooks = await getDb().select({ id: webhooks.id, events: webhooks.events }).from(webhooks)
     .where(and(eq(webhooks.userId, workspaceId), eq(webhooks.active, true)));
-  const targets = hooks.filter(hook => hook.events.includes(event));
+  const subscribed = hooks.filter(hook => hook.events.includes(event));
+  if (!subscribed.length) return [];
+  const backlog = await getDb().select({ id: webhookDeliveries.webhookId, total: sql<number>`count(*)::int` }).from(webhookDeliveries)
+    .where(and(inArray(webhookDeliveries.webhookId, subscribed.map(hook => hook.id)), eq(webhookDeliveries.status, 'pending'))).groupBy(webhookDeliveries.webhookId);
+  // A receiver that is down does not grow the queue without end; events past the cap are dropped.
+  const targets = subscribed.filter(hook => (backlog.find(item => item.id === hook.id)?.total ?? 0) < apiLimits.maxPendingPerWebhook);
   if (!targets.length) return [];
   const eventId = randomUUID();
   const rows = await getDb().insert(webhookDeliveries).values(targets.map(hook => ({
@@ -114,11 +125,19 @@ export async function emitEvent(workspaceId: string, event: WebhookEvent, data: 
 }
 
 /** Retries due deliveries; called by the scheduled job and after each event. */
-export async function processDueDeliveries(limit = 50) {
-  const due = await getDb().select({ id: webhookDeliveries.id }).from(webhookDeliveries)
-    .where(and(eq(webhookDeliveries.status, 'pending'), lte(webhookDeliveries.nextAttemptAt, sql`now()`))).limit(limit);
-  for (const item of due) await attemptDelivery(item.id);
-  return due.length;
+export async function processDueDeliveries(budgetMs = 45_000) {
+  const started = Date.now();
+  // Finished deliveries, with their payloads, are kept for 30 days.
+  await getDb().delete(webhookDeliveries).where(and(inArray(webhookDeliveries.status, ['delivered', 'failed']), lte(webhookDeliveries.createdAt, sql`now() - interval '30 days'`)));
+  let processed = 0;
+  while (Date.now() - started < budgetMs) {
+    const due = await getDb().select({ id: webhookDeliveries.id }).from(webhookDeliveries)
+      .where(and(eq(webhookDeliveries.status, 'pending'), lte(webhookDeliveries.nextAttemptAt, sql`now()`))).orderBy(webhookDeliveries.nextAttemptAt).limit(10);
+    if (!due.length) break;
+    await Promise.all(due.map(item => attemptDelivery(item.id)));
+    processed += due.length;
+  }
+  return processed;
 }
 
 const hookRecord = (row: typeof webhooks.$inferSelect): WebhookRecord => ({ id: row.id, url: row.url, events: row.events as WebhookEvent[], active: row.active, created_at: row.createdAt.toISOString() });
@@ -174,13 +193,16 @@ export async function listDeliveries(workspaceId: string, hookId: string): Promi
   }));
 }
 
-/** Sends a delivery again now, keeping its event id; at most once a minute per delivery. */
+/** Sends a delivery again now, keeping its event id. Refused while an attempt is in flight (the claim pushes the next attempt ahead). */
 export async function redeliver(workspaceId: string, deliveryId: string) {
   if (!id.safeParse(deliveryId).success) throw new HttpError(404, 'Delivery not found');
   const [row] = await getDb().select({ id: webhookDeliveries.id }).from(webhookDeliveries).innerJoin(webhooks, eq(webhooks.id, webhookDeliveries.webhookId))
     .where(and(eq(webhooks.userId, workspaceId), eq(webhookDeliveries.id, deliveryId)));
   if (!row) throw new HttpError(404, 'Delivery not found');
-  await getDb().update(webhookDeliveries).set({ status: 'pending', attempts: 0, nextAttemptAt: sql`now()` }).where(eq(webhookDeliveries.id, deliveryId));
+  const [reset] = await getDb().update(webhookDeliveries).set({ status: 'pending', attempts: 0, nextAttemptAt: sql`now()` })
+    .where(and(eq(webhookDeliveries.id, deliveryId), sql`(${webhookDeliveries.status} <> 'pending' or ${webhookDeliveries.nextAttemptAt} is null or ${webhookDeliveries.nextAttemptAt} <= now() + interval '1 minute' or ${webhookDeliveries.nextAttemptAt} > now() + interval '2 minutes')`))
+    .returning({ id: webhookDeliveries.id });
+  if (!reset) throw new HttpError(409, 'This delivery is being sent. Try again in a few minutes.');
   await attemptDelivery(deliveryId);
   return (await listDeliveriesById(deliveryId));
 }
@@ -195,6 +217,9 @@ export async function pingWebhook(workspaceId: string, hookId: string) {
   if (!id.safeParse(hookId).success) throw new HttpError(404, 'Webhook not found');
   const [hook] = await getDb().select().from(webhooks).where(and(eq(webhooks.userId, workspaceId), eq(webhooks.id, hookId)));
   if (!hook) throw new HttpError(404, 'Webhook not found');
+  const [{ recent }] = await getDb().select({ recent: sql<number>`count(*)::int` }).from(webhookDeliveries)
+    .where(and(eq(webhookDeliveries.webhookId, hook.id), eq(webhookDeliveries.event, 'ping'), sql`${webhookDeliveries.createdAt} > now() - interval '1 minute'`));
+  if (recent >= 5) throw new HttpError(429, 'Too many requests. Wait for the next minute.');
   const [row] = await getDb().insert(webhookDeliveries).values({ webhookId: hook.id, eventId: randomUUID(), event: 'ping', payload: { message: 'QRConnect webhook test' }, status: 'pending', nextAttemptAt: sql`now()` }).returning({ id: webhookDeliveries.id });
   await attemptDelivery(row.id);
   return listDeliveriesById(row.id);
@@ -203,7 +228,7 @@ export async function pingWebhook(workspaceId: string, hookId: string) {
 /** Queues the event and tries each delivery right away; failures are retried by the scheduled job. */
 export async function emitAndDeliver(workspaceId: string, event: WebhookEvent, data: Record<string, unknown>) {
   try {
-    for (const deliveryId of await emitEvent(workspaceId, event, data)) await attemptDelivery(deliveryId);
+    await Promise.all((await emitEvent(workspaceId, event, data)).map(deliveryId => attemptDelivery(deliveryId)));
   } catch {
     console.error(`Webhook event ${event} could not be queued.`);
   }
