@@ -36,6 +36,13 @@
       "when": 1794723228838,
       "tag": "0004_qr_organization",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1794726747617,
+      "tag": "0005_qr_content_and_destination_history",
+      "breakpoints": true
     }
   ]
 }

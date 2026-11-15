@@ -1,11 +1,13 @@
 export type QRFileFormat = "png" | "svg";
+export const qrFileSizes = [512, 1024, 2048] as const;
+export type QRFileSize = (typeof qrFileSizes)[number];
 
-export async function exportQRBlob(svg: SVGSVGElement | null, format: QRFileFormat) {
+export async function exportQRBlob(svg: SVGSVGElement | null, format: QRFileFormat, size: QRFileSize = 1024) {
   if (!svg) throw new Error("QR is not ready");
   const clone = svg.cloneNode(true) as SVGSVGElement;
   const box = svg.viewBox.baseVal;
   if (!box.width || !box.height) throw new Error("QR is not ready");
-  const width = 1024,
+  const width = size,
     height = Math.round((width * box.height) / box.width);
   clone.setAttribute("width", String(width));
   clone.setAttribute("height", String(height));
@@ -55,7 +57,8 @@ export async function downloadQR(
   svg: SVGSVGElement | null,
   format: QRFileFormat,
   name = "qr-code",
+  size: QRFileSize = 1024,
 ) {
   const filename = `${name.replace(/[^a-zA-Z0-9_-]/g, "-").slice(0, 80)}.${format}`;
-  saveDownload(await exportQRBlob(svg, format), filename);
+  saveDownload(await exportQRBlob(svg, format, size), filename);
 }

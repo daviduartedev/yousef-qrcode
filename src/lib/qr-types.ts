@@ -1,4 +1,5 @@
 import type { QRDesign } from './qr-design';
+import type { QRContent } from './qr-content';
 
 export interface QRCodeRecord {
   id: string;
@@ -8,6 +9,7 @@ export interface QRCodeRecord {
   title: string | null;
   qr_type: string;
   design: QRDesign | null;
+  content?: QRContent | null;
   tracking_enabled: boolean;
   is_active: boolean;
   total_scans: number;
@@ -43,4 +45,11 @@ export interface QRAnalyticsResponse {
   qrCode: QRCodeRecord;
   scans: ScanRecord[];
   analytics: QRAnalytics;
+}
+
+export interface QRDestinationChange {
+  id: string;
+  previous_url: string;
+  new_url: string;
+  changed_at: string;
 }

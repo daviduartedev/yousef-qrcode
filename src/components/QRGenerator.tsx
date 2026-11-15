@@ -1,17 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import dynamic from "next/dynamic";
+import Link from "next/link";
 const QRCodeStyled = dynamic(() => import("./QRCodePreview"), { ssr: false });
 import QRDesignTab from "./QRDesignTab";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   Collapsible,
   CollapsibleContent,
@@ -22,6 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import ContactCardEditor from "./ContactCardEditor";
 import {
   saveNewQRCode,
+  saveNewStaticQRCode,
   saveQRCodeDesign,
   getQRCode,
   getTrackingUrl,
@@ -31,14 +25,6 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { useEditorNavigation, DraftNotice } from "./EditorNavigation";
 import {
-  Globe,
-  FileText,
-  Download,
-  Contact,
-  MapPin,
-  Link2,
-  FileInput,
-  User,
   ChevronRight,
   ChevronLeft,
   ChevronDown,
@@ -52,21 +38,9 @@ import {
   MapPinned,
   Clock,
   RefreshCw,
+  Check,
 } from "lucide-react";
 import type { CornerDotType, CornerSquareType, DotType } from "qr-code-styling";
-
-const tabs = [
-  { icon: Globe, labelKey: "qrGenerator.tabs.website" },
-  { icon: FileText, labelKey: "qrGenerator.tabs.pdf" },
-  { icon: Download, labelKey: "qrGenerator.tabs.appDownloads" },
-  { icon: Contact, labelKey: "qrGenerator.tabs.contactCard" },
-  { icon: MapPin, labelKey: "qrGenerator.tabs.location" },
-  { icon: Link2, labelKey: "qrGenerator.tabs.linkpage" },
-  { icon: FileInput, labelKey: "qrGenerator.tabs.form" },
-  { icon: User, labelKey: "qrGenerator.tabs.me" },
-  { icon: FileInput, labelKey: "qrGenerator.tabs.form" },
-];
-
 import { templatesWithDesign as templates, logos } from "./qr-catalog";
 import {
   defaultDesign,
@@ -76,23 +50,52 @@ import {
   frameStyles,
   type QRDesign,
 } from "@/lib/qr-design";
-import { downloadQR } from "@/lib/qr-export";
+import {
+  describeQRDestination,
+  isStaticQRType,
+  qrTypeOf,
+} from "@/lib/qr-content";
 import type { QRAnalyticsResponse, QRCodeRecord } from "@/lib/qr-types";
+import { QRTypeStep, type WizardType } from "./qr-wizard/QRTypeStep";
+import { QRContentFields } from "./qr-wizard/QRContentFields";
+import { QRDownloadDialog } from "./qr-wizard/QRDownloadDialog";
+import { QRDestinationEditor } from "./QRDestinationEditor";
+import {
+  checkContent,
+  emptyFields,
+  fieldsFromContent,
+  type ContentFields,
+} from "./qr-wizard/content";
+
+export type WizardStep = "type" | "content" | "design" | "done";
+const steps: { id: WizardStep; label: string }[] = [
+  { id: "type", label: "Type" },
+  { id: "content", label: "Content" },
+  { id: "design", label: "Design" },
+  { id: "done", label: "Done" },
+];
+/** Same length as a real short code, so the design preview keeps the final module count. */
+const previewShortCode = "preview00000";
 
 const editorSnapshot = (
   url: string,
   design: QRDesign,
   tracking: boolean,
-  tab: number,
-) => JSON.stringify({ url, design, tracking, tab });
+  qrType: WizardType,
+  fields: ContentFields,
+  title: string,
+) => JSON.stringify({ url, design, tracking, qrType, fields, title });
 
 const QRGenerator = () => {
   const { t: copy } = useTranslation("copy");
+  const { t: creation } = useTranslation("creation");
   const { user } = useAuth();
   const editId = useSearchParams().get("edit");
   const router = useRouter();
   const loadedSource = useRef<string | null | undefined>(undefined);
-  const { draft, updateDraft, hasDraft } = useEditorNavigation();
+  /** Set after creation until the URL carries the new id, so the done step is kept. */
+  const pendingEdit = useRef<string | null>(null);
+  const { draft, updateDraft, hasDraft, discardDraft } = useEditorNavigation();
   const blockedByDraft = hasDraft && draft.current?.editId !== editId;
   const [record, setRecord] = useState<QRCodeRecord | null>(null);
   const [ready, setReady] = useState(false);
@@ -102,7 +105,7 @@ const QRGenerator = () => {
     structuredClone(defaultDesign),
   );
   const previewRef = useRef<HTMLDivElement>(null);
-  const [isDownloading, setIsDownloading] = useState(false);
+  const stepHeading = useRef<HTMLHeadingElement>(null);
   const selectedTemplate = design.templateId;
   const selectedLogo = design.logoId;
   const setSelectedLogo = (id: string | null) =>
@@ -164,33 +167,20 @@ const QRGenerator = () => {
     setDesign((previous) => ({ ...previous, backgroundOptions: { color } }));
   const validDesign =
     qrDesignSchema.safeParse(design).success && hasVisibleContrast(design);
-  const exportQR = async () => {
-    setIsDownloading(true);
-    try {
-      await downloadQR(
-        previewRef.current?.querySelector("svg") ?? null,
-        downloadFormat as "png" | "svg",
-      );
-    } catch {
-      toast({
-        title: copy("Download failed. Check the preview and try again."),
-        variant: "destructive",
-      });
-    } finally {
-      setIsDownloading(false);
-    }
-  };
 
   const { t, i18n } = useTranslation();
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState(0);
+  const [qrType, setQRType] = useState<WizardType>("website");
+  const [fields, setFields] = useState<ContentFields>(emptyFields);
+  const [title, setTitle] = useState("");
+  const [step, setStep] = useState<WizardStep>("type");
+  const [showErrors, setShowErrors] = useState(false);
   const [url, setUrl] = useState("");
 
-  const [trackAnalytics, setTrackAnalytics] = useState(false);
+  const [trackAnalytics, setTrackAnalytics] = useState(true);
 
   const [activeCustomTab, setActiveCustomTab] = useState("templates");
 
-  const [downloadFormat, setDownloadFormat] = useState("png");
   const [isGenerating, setIsGenerating] = useState(false);
   const [analyticsData, setAnalyticsData] =
     useState<QRAnalyticsResponse | null>(null);
@@ -198,17 +188,38 @@ const QRGenerator = () => {
   const [isAnalyticsOpen, setIsAnalyticsOpen] = useState(false);
   const templatesScrollRef = useRef<HTMLDivElement>(null);
   const destination = normalizeDestination(url);
-  const qrValue = trackAnalytics
-    ? record?.tracking_enabled && record.destination_url === destination
+  const staticType = isStaticQRType(qrType) ? qrType : null;
+  const contentCheck = staticType ? checkContent(staticType, fields) : null;
+  const contentValid = staticType
+    ? Boolean(contentCheck?.ok)
+    : qrType === "website" && Boolean(destination);
+  const qrValue = record
+    ? record.tracking_enabled
       ? getTrackingUrl(record.short_code)
-      : ""
-    : destination || "";
+      : record.destination_url
+    : staticType
+      ? contentCheck?.ok
+        ? contentCheck.payload
+        : ""
+      : trackAnalytics
+        ? ""
+        : destination || "";
+  const designPreviewValue =
+    qrValue ||
+    (!record && qrType === "website" && trackAnalytics && destination
+      ? getTrackingUrl(previewShortCode)
+      : "");
   const trackingShortCode = record?.tracking_enabled ? record.short_code : null;
-  const snapshot = editorSnapshot(url, design, trackAnalytics, activeTab);
-  const dirty = ready && snapshot !== baseline;
+  const snapshot = editorSnapshot(url, design, trackAnalytics, qrType, fields, title);
+  const dirty = ready && step !== "done" && snapshot !== baseline;
 
   useEffect(() => {
     if (!user?.id || blockedByDraft) return;
+    if (pendingEdit.current && editId === pendingEdit.current) {
+      pendingEdit.current = null;
+      loadedSource.current = editId;
+      return;
+    }
     let cancelled = false;
     loadedSource.current = undefined;
     setReady(false);
@@ -219,7 +230,10 @@ const QRGenerator = () => {
         setUrl(previous.url);
         setDesign(previous.design);
         setTrackAnalytics(previous.tracking);
-        setActiveTab(previous.tab);
+        setQRType(previous.wizard?.qrType ?? "website");
+        setFields(previous.wizard?.fields ?? emptyFields);
+        setTitle(previous.wizard?.title ?? "");
+        setStep(previous.wizard?.step ?? (editId ? "design" : "type"));
         setRecord(previous.record);
         setBaseline(previous.baseline);
       } else if (editId) {
@@ -227,22 +241,26 @@ const QRGenerator = () => {
           const result = await getQRCode(editId);
           if (cancelled) return;
           const row = result.qrCode,
-            restoredDesign = row.design ?? structuredClone(defaultDesign);
-          const tab = Math.max(
-            0,
-            tabs.findIndex((item) => item.labelKey === row.qr_type),
-          );
+            restoredDesign = row.design ?? structuredClone(defaultDesign),
+            type = qrTypeOf(row.qr_type),
+            restoredFields = row.content ? fieldsFromContent(row.content) : emptyFields,
+            restoredTitle = row.title ?? "";
           setRecord(row);
           setUrl(row.destination_url);
           setDesign(restoredDesign);
           setTrackAnalytics(row.tracking_enabled);
-          setActiveTab(tab);
+          setQRType(type);
+          setFields(restoredFields);
+          setTitle(restoredTitle);
+          setStep("design");
           setBaseline(
             editorSnapshot(
               row.destination_url,
               restoredDesign,
               row.tracking_enabled,
-              tab,
+              type,
+              restoredFields,
+              restoredTitle,
             ),
           );
         } catch {
@@ -253,9 +271,13 @@ const QRGenerator = () => {
         setRecord(null);
         setUrl("");
         setDesign(initial);
-        setTrackAnalytics(false);
-        setActiveTab(0);
-        setBaseline(editorSnapshot("", initial, false, 0));
+        setTrackAnalytics(true);
+        setQRType("website");
+        setFields(emptyFields);
+        setTitle("");
+        setStep("type");
+        setShowErrors(false);
+        setBaseline(editorSnapshot("", initial, true, "website", emptyFields, ""));
       }
       if (!cancelled) {
         loadedSource.current = editId;
@@ -274,7 +296,8 @@ const QRGenerator = () => {
       loadedSource.current === editId &&
       !loadError &&
       user?.id &&
-      !blockedByDraft
+      !blockedByDraft &&
+      !pendingEdit.current
     )
       updateDraft(
         {
@@ -283,7 +306,8 @@ const QRGenerator = () => {
           url,
           design,
           tracking: trackAnalytics,
-          tab: activeTab,
+          tab: 0,
+          wizard: { qrType, fields, title, step },
           record,
           baseline,
         },
@@ -297,7 +321,10 @@ const QRGenerator = () => {
     url,
     design,
     trackAnalytics,
-    activeTab,
+    qrType,
+    fields,
+    title,
+    step,
     record,
     baseline,
     dirty,
@@ -326,20 +353,23 @@ const QRGenerator = () => {
     }
   }, [trackingShortCode, fetchAnalytics]);
 
-  const saveDesign = async () => {
-    const destinationUrl = normalizeDestination(url);
-    if (!destinationUrl || !validDesign) {
-      toast({
-        title: copy("Enter a valid HTTP/HTTPS URL and contrasting colors."),
-        variant: "destructive",
-      });
+  const goTo = (next: WizardStep) => {
+    setStep(next);
+    requestAnimationFrame(() => stepHeading.current?.focus());
+  };
+  const continueFromContent = () => {
+    if (!contentValid) {
+      setShowErrors(true);
       return;
     }
-    if (!trackAnalytics && !previewRef.current?.querySelector("svg")) {
+    setShowErrors(false);
+    goTo("design");
+  };
+
+  const saveDesign = async () => {
+    if (!validDesign || (!record && !contentValid)) {
       toast({
-        title: copy(
-          "Use a shorter URL and contrasting valid colors to generate this QR.",
-        ),
+        title: copy("Enter a valid HTTP/HTTPS URL and contrasting colors."),
         variant: "destructive",
       });
       return;
@@ -348,39 +378,51 @@ const QRGenerator = () => {
     try {
       const result = record
         ? await saveQRCodeDesign(record.id, design)
-        : await saveNewQRCode(
-            destinationUrl,
-            url,
-            tabs[activeTab].labelKey,
-            design,
-            trackAnalytics,
-          );
-      setRecord(result.qrCode);
-      setUrl(result.qrCode.destination_url);
+        : staticType && contentCheck?.ok
+          ? await saveNewStaticQRCode(contentCheck.content, title, design)
+          : await saveNewQRCode(
+              destination!,
+              title.trim() || url,
+              "website",
+              design,
+              trackAnalytics,
+            );
+      const row = result.qrCode;
+      const nextFields = row.content ? fieldsFromContent(row.content) : fields;
+      const nextTitle = row.title ?? "";
+      setRecord(row);
+      setUrl(row.destination_url);
+      setFields(nextFields);
+      setTitle(nextTitle);
       const savedSnapshot = editorSnapshot(
-        result.qrCode.destination_url,
+        row.destination_url,
         design,
-        trackAnalytics,
-        activeTab,
+        row.tracking_enabled,
+        qrType,
+        nextFields,
+        nextTitle,
       );
       setBaseline(savedSnapshot);
       if (!record && user) {
         updateDraft(
           {
             ownerId: user.id,
-            editId: result.qrCode.id,
-            url: result.qrCode.destination_url,
+            editId: row.id,
+            url: row.destination_url,
             design,
-            tracking: trackAnalytics,
-            tab: activeTab,
-            record: result.qrCode,
+            tracking: row.tracking_enabled,
+            tab: 0,
+            wizard: { qrType, fields: nextFields, title: nextTitle, step: "done" },
+            record: row,
             baseline: savedSnapshot,
           },
           false,
         );
-        router.replace("/app?edit=" + encodeURIComponent(result.qrCode.id));
+        pendingEdit.current = row.id;
+        router.replace("/app?edit=" + encodeURIComponent(row.id));
+        goTo("done");
       }
-      toast({ title: copy("QR design saved") });
+      toast({ title: record ? copy("QR design saved") : creation("QR code created") });
     } catch {
       toast({
         title: copy("Unable to create QR. Please try again."),
@@ -390,9 +432,29 @@ const QRGenerator = () => {
       setIsGenerating(false);
     }
   };
-  const handleGenerateQR = () => {
-    if (trackAnalytics && !record) void saveDesign();
+  const startOver = () => {
+    discardDraft();
+    if (editId) router.push("/app");
+    else {
+      const initial = structuredClone(defaultDesign);
+      setRecord(null);
+      setUrl("");
+      setDesign(initial);
+      setTrackAnalytics(true);
+      setQRType("website");
+      setFields(emptyFields);
+      setTitle("");
+      setShowErrors(false);
+      setBaseline(editorSnapshot("", initial, true, "website", emptyFields, ""));
+      goTo("type");
+    }
   };
+  const downloadFailed = () =>
+    toast({
+      title: copy("Download failed. Check the preview and try again."),
+      variant: "destructive",
+    });
+  const downloadName = (record?.title || title || "qr-code").slice(0, 80);
 
   // Handle template carousel scroll
   const scrollTemplates = (direction: "left" | "right") => {
@@ -424,117 +486,279 @@ const QRGenerator = () => {
         {copy("Unable to open this QR. Return to My QR Codes and try again.")}
       </p>
     );
+  const creating = !record;
+  const stepIndex = steps.findIndex((item) => item.id === step);
+  const typeLabel = creation(
+    { website: "Website", text: "Text", email: "Email", phone: "Phone", sms: "SMS", wifi: "Wi-Fi", contactCard: "Contact card" }[qrType],
+  );
+  const reachable = (target: WizardStep) =>
+    creating &&
+    target !== "done" &&
+    (target === "type" || (target === "content" ? true : contentValid));
   return (
     <fieldset
       disabled={isGenerating}
       aria-label={copy("QR editor")}
       className="bg-card rounded-lg shadow-xl p-4 sm:p-8 max-w-6xl mx-auto w-full min-w-0"
     >
-      {/* Tab Navigation */}
-      <div className="flex items-center gap-2 mb-6 overflow-x-auto pb-2">
-        {tabs.map((tab, index) => {
-          const Icon = tab.icon;
-          return (
-            <button
-              key={index}
-              onClick={() => setActiveTab(index)}
-              disabled={Boolean(record) || isGenerating}
-              className={`flex items-center gap-2 px-4 py-2 rounded-md whitespace-nowrap transition-colors ${
-                activeTab === index
-                  ? "bg-primary/10 text-primary border border-primary"
-                  : "bg-muted text-muted-foreground hover:bg-muted/80"
-              }`}
-            >
-              <Icon className="w-4 h-4" />
-              <span className="text-sm font-medium">{t(tab.labelKey)}</span>
-            </button>
-          );
-        })}
-        <button className="p-2 hover:bg-muted rounded-md">
-          <ChevronRight className="w-4 h-4" />
-        </button>
-      </div>
+      {(creating || step === "done") && (
+        <nav aria-label={creation("QR creation steps")} className="mb-6">
+          <ol className="flex flex-wrap items-center gap-2 text-sm">
+            {steps.map((item, index) => {
+              const current = item.id === step;
+              const complete = index < stepIndex;
+              return (
+                <li key={item.id} className="flex items-center gap-2">
+                  {index > 0 && <ChevronRight className="h-4 w-4 text-muted-foreground rtl:rotate-180" aria-hidden="true" />}
+                  <button
+                    type="button"
+                    aria-current={current ? "step" : undefined}
+                    disabled={!current && !reachable(item.id)}
+                    onClick={() => goTo(item.id)}
+                    className={`flex items-center gap-2 rounded-full border px-3 py-1.5 ${
+                      current
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : complete
+                          ? "border-primary text-primary"
+                          : "border-border text-muted-foreground"
+                    } disabled:cursor-default`}
+                  >
+                    <span aria-hidden="true">{complete ? <Check className="h-3.5 w-3.5" /> : index + 1}</span>
+                    {creation(item.label)}
+                  </button>
+                </li>
+              );
+            })}
+          </ol>
+        </nav>
+      )}
+      <h2 ref={stepHeading} tabIndex={-1} className="sr-only">
+        {creating || step === "done"
+          ? creation("Step {{index}} of 4: {{label}}", { index: stepIndex + 1, label: creation(steps[stepIndex].label) })
+          : creation("Edit QR code")}
+      </h2>
 
-      {/* Contact Card Tab - Special Layout */}
-      {activeTab === 3 ? (
-        <ContactCardEditor />
+      {step === "type" && creating ? (
+        <div className="space-y-6">
+          <QRTypeStep value={qrType} onSelect={(type) => { setQRType(type); setShowErrors(false); }} />
+          <div className="flex justify-end">
+            <Button size="lg" onClick={() => goTo("content")}>
+              {creation("Next")}
+              <ChevronRight className="w-4 h-4 ms-2 rtl:rotate-180" aria-hidden="true" />
+            </Button>
+          </div>
+        </div>
+      ) : step === "content" && creating ? (
+        qrType === "contactCard" ? (
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              {creation("This contact card editor is a local preview. It is not saved or published yet.")}
+            </p>
+            <ContactCardEditor />
+            <Button variant="outline" onClick={() => goTo("type")}>
+              <ChevronLeft className="w-4 h-4 me-2 rtl:rotate-180" aria-hidden="true" />
+              {creation("Back")}
+            </Button>
+          </div>
+        ) : (
+          <form
+            noValidate
+            onSubmit={(event) => { event.preventDefault(); continueFromContent(); }}
+            className="grid md:grid-cols-[minmax(0,1fr),280px] gap-8"
+          >
+            <div className="space-y-5 min-w-0">
+              <div>
+                <h3 className="text-lg font-semibold">{creation("{{type}} content", { type: typeLabel })}</h3>
+                <p className="text-sm text-muted-foreground">
+                  {staticType
+                    ? creation("Static QR: the content is stored in the pattern and cannot change after printing.")
+                    : creation("Choose dynamic to track scans and change the destination without reprinting.")}
+                </p>
+              </div>
+              {qrType === "website" ? (
+                <div className="space-y-4">
+                  <div className="space-y-1">
+                    <label htmlFor="qr-destination" className="text-sm font-medium">
+                      {copy("Destination URL")}<span aria-hidden="true"> *</span>
+                    </label>
+                    <Input
+                      id="qr-destination"
+                      dir="ltr"
+                      inputMode="url"
+                      placeholder={t("qrGenerator.addUrl")}
+                      value={url}
+                      maxLength={2048}
+                      aria-invalid={showErrors && !destination}
+                      aria-describedby={showErrors && !destination ? "qr-destination-error" : undefined}
+                      onChange={(e) => setUrl(e.target.value)}
+                    />
+                    {((showErrors && !destination) || (url.trim() && !destination)) && (
+                      <p id="qr-destination-error" className="text-sm text-destructive">
+                        {creation("Enter a valid HTTP/HTTPS URL.")}
+                      </p>
+                    )}
+                  </div>
+                  <fieldset className="space-y-2">
+                    <legend className="text-sm font-medium">{creation("QR mode")}</legend>
+                    {[
+                      { tracked: true, label: "Dynamic (trackable)", hint: "Uses a short QRConnect URL. Records scans and lets you change the destination later." },
+                      { tracked: false, label: "Static (direct)", hint: "Encodes the URL itself. No scan tracking and the destination cannot change." },
+                    ].map((option) => (
+                      <label key={option.label} className={`flex cursor-pointer items-start gap-3 rounded-md border p-3 ${trackAnalytics === option.tracked ? "border-primary bg-primary/5" : "border-border"}`}>
+                        <input
+                          type="radio"
+                          name="qr-mode"
+                          className="mt-1"
+                          checked={trackAnalytics === option.tracked}
+                          onChange={() => setTrackAnalytics(option.tracked)}
+                        />
+                        <span>
+                          <span className="block font-medium">{creation(option.label)}</span>
+                          <span className="block text-sm text-muted-foreground">{creation(option.hint)}</span>
+                        </span>
+                      </label>
+                    ))}
+                  </fieldset>
+                </div>
+              ) : staticType ? (
+                <QRContentFields
+                  type={staticType}
+                  fields={fields}
+                  onChange={setFields}
+                  invalid={contentCheck && !contentCheck.ok ? contentCheck.fields : []}
+                  showErrors={showErrors}
+                />
+              ) : null}
+              {contentCheck && !contentCheck.ok && contentCheck.tooLong && (
+                <p role="alert" className="text-sm text-destructive">
+                  {creation("This content is too long for one QR code. Shorten it.")}
+                </p>
+              )}
+              <div className="space-y-1">
+                <label htmlFor="qr-title" className="text-sm font-medium">{creation("QR name (optional)")}</label>
+                <Input id="qr-title" dir="auto" maxLength={255} value={title} onChange={(event) => setTitle(event.target.value)} />
+                <p className="text-xs text-muted-foreground">{creation("Shown in My QR Codes. Defaults to the content.")}</p>
+              </div>
+              {showErrors && !contentValid && (
+                <p role="alert" className="text-sm text-destructive">{creation("Review the highlighted fields to continue.")}</p>
+              )}
+              <div className="flex flex-wrap justify-between gap-2">
+                <Button type="button" variant="outline" onClick={() => goTo("type")}>
+                  <ChevronLeft className="w-4 h-4 me-2 rtl:rotate-180" aria-hidden="true" />
+                  {creation("Back")}
+                </Button>
+                <Button type="submit">
+                  {creation("Next: design")}
+                  <ChevronRight className="w-4 h-4 ms-2 rtl:rotate-180" aria-hidden="true" />
+                </Button>
+              </div>
+            </div>
+            <div className="flex flex-col items-center gap-3">
+              <div className="border-2 border-border rounded-lg p-4 bg-background" aria-label={copy("QR preview")}>
+                {designPreviewValue ? (
+                  <QRCodeStyled data={designPreviewValue} design={design} width={192} />
+                ) : (
+                  <div className="w-48 min-h-48 grid place-items-center text-muted-foreground text-sm text-center p-4">
+                    {creation("Fill in the content to preview the code.")}
+                  </div>
+                )}
+              </div>
+              {!record && trackAnalytics && qrType === "website" && destination && (
+                <p className="max-w-64 text-xs text-muted-foreground text-center">
+                  {creation("Preview pattern. The final short URL is created in the last step.")}
+                </p>
+              )}
+            </div>
+          </form>
+        )
+      ) : step === "done" && record ? (
+        <section className="grid md:grid-cols-[minmax(0,1fr),280px] gap-8" aria-live="polite">
+          <div className="space-y-4 min-w-0">
+            <h3 className="text-2xl font-semibold">{creation("Your QR code is ready")}</h3>
+            <dl className="grid grid-cols-[auto,1fr] gap-x-4 gap-y-2 text-sm">
+              <dt className="text-muted-foreground">{creation("Name")}</dt>
+              <dd dir="auto" className="break-words">{record.title}</dd>
+              <dt className="text-muted-foreground">{creation("Type")}</dt>
+              <dd>{typeLabel} · {record.tracking_enabled ? creation("Dynamic (trackable)") : creation("Static")}</dd>
+              <dt className="text-muted-foreground">{record.tracking_enabled ? creation("Opens") : creation("Content")}</dt>
+              <dd><bdi dir="auto" className="break-all">{describeQRDestination(record)}</bdi></dd>
+              {record.tracking_enabled && (
+                <>
+                  <dt className="text-muted-foreground">{creation("Tracking URL")}</dt>
+                  <dd><bdi dir="ltr" className="break-all font-mono text-xs">{getTrackingUrl(record.short_code)}</bdi></dd>
+                </>
+              )}
+            </dl>
+            <p className="text-sm text-muted-foreground">
+              {record.tracking_enabled
+                ? creation("Scan the code to test it. You can change its destination later in My QR Codes without reprinting.")
+                : creation("Scan the code to test it. Static content cannot change after printing.")}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button asChild variant="outline">
+                <Link href={"/my-qrcodes?focus=" + encodeURIComponent(record.id)}>{creation("View in My QR Codes")}</Link>
+              </Button>
+              <Button variant="outline" onClick={() => goTo("design")}>{creation("Edit design")}</Button>
+              <Button variant="ghost" onClick={startOver}>{creation("Create another QR")}</Button>
+            </div>
+          </div>
+          <div className="flex flex-col items-center gap-4">
+            <div ref={previewRef} className="border-2 border-border rounded-lg p-4 bg-background" aria-label={copy("QR preview")}>
+              <QRCodeStyled data={qrValue} design={design} width={224} />
+            </div>
+            <QRDownloadDialog data={qrValue} design={design} name={downloadName} disabled={!validDesign} onError={downloadFailed} />
+          </div>
+        </section>
       ) : (
         <div className="grid md:grid-cols-[minmax(0,1fr),280px] gap-8">
           {/* Left Column */}
           <div className="space-y-6 min-w-0">
-            {/* URL Input */}
-            <div className="flex flex-col sm:flex-row gap-3">
-              <Input
-                aria-label={copy("Destination URL")}
-                placeholder={copy(
-                  activeTab === 0
-                    ? t("qrGenerator.addUrl")
-                    : activeTab === 1
-                      ? t("qrGenerator.addPdfUrl")
-                      : activeTab === 2
-                        ? t("qrGenerator.addAppStoreUrl")
-                        : activeTab === 4
-                          ? t("qrGenerator.enterLocation")
-                          : activeTab === 5
-                            ? t("qrGenerator.addLinkpageUrl")
-                            : activeTab === 6
-                              ? t("qrGenerator.addFormUrl")
-                              : t("qrGenerator.enterValue"),
-                )}
-                value={url}
-                readOnly={Boolean(record)}
-                disabled={isGenerating}
-                onChange={(e) => setUrl(e.target.value)}
-                className="flex-1"
-              />
-              <Button
-                size="lg"
-                className="px-8"
-                onClick={handleGenerateQR}
-                disabled={
-                  isGenerating ||
-                  !normalizeDestination(url) ||
-                  !validDesign ||
-                  Boolean(record)
-                }
-              >
-                {isGenerating ? (
+            {record ? (
+              <div className="space-y-3 rounded-lg border border-border p-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 dir="auto" className="font-semibold break-words">{record.title}</h3>
+                  <span className="rounded-full bg-muted px-2 py-0.5 text-xs">
+                    {typeLabel} · {record.tracking_enabled ? creation("Dynamic (trackable)") : creation("Static")}
+                  </span>
+                </div>
+                {staticType ? (
                   <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    {copy("Gerando...")}
+                    <QRContentFields type={staticType} fields={fields} onChange={() => {}} invalid={[]} showErrors={false} readOnly />
+                    <p className="text-sm text-muted-foreground">
+                      {creation("Static content is stored in the pattern. Create a new QR to change it.")}
+                    </p>
                   </>
+                ) : record.tracking_enabled ? (
+                  <QRDestinationEditor
+                    record={record}
+                    onChanged={(result) => {
+                      setRecord(result.qrCode);
+                      setUrl(result.qrCode.destination_url);
+                      setBaseline(editorSnapshot(result.qrCode.destination_url, design, true, qrType, fields, title));
+                    }}
+                  />
                 ) : (
-                  t("qrGenerator.generateQR")
+                  <p className="text-sm">
+                    <bdi dir="ltr" className="break-all">{record.destination_url}</bdi>
+                    <span className="block text-muted-foreground">
+                      {creation("Direct and static QR codes store their content in the pattern. Create a new QR to change it.")}
+                    </span>
+                  </p>
                 )}
-              </Button>
-            </div>
-
-            {/* Toggles */}
-            {url.trim() && !destination && (
-              <p role="alert" className="text-sm text-destructive">
-                {copy("Enter a valid HTTP/HTTPS URL and contrasting colors.")}
-              </p>
-            )}
-            <div className="flex flex-wrap gap-6">
-              <div className="flex items-center gap-2">
-                <Switch
-                  checked={trackAnalytics}
-                  aria-label={t("qrGenerator.trackAnalytics")}
-                  disabled={Boolean(record) || isGenerating}
-                  onCheckedChange={setTrackAnalytics}
-                />
-                <span className="text-sm font-medium">
-                  {t("qrGenerator.trackAnalytics")}
-                </span>
               </div>
-            </div>
-
-            {record && (
-              <p className="text-sm text-muted-foreground">
-                {copy(
-                  "Editing saved design. Destination and tracking mode are read-only.",
-                )}
-              </p>
+            ) : (
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h3 className="text-lg font-semibold">{creation("Customize the design")}</h3>
+                  <p className="text-sm text-muted-foreground">
+                    {typeLabel} · <bdi dir="auto" className="break-all">{staticType && contentCheck?.ok ? describeQRDestination({ qr_type: staticType, destination_url: contentCheck.payload, content: contentCheck.content }) : destination}</bdi>
+                  </p>
+                </div>
+                <Button type="button" variant="outline" onClick={() => goTo("content")}>
+                  <ChevronLeft className="w-4 h-4 me-2 rtl:rotate-180" aria-hidden="true" />
+                  {creation("Back")}
+                </Button>
+              </div>
             )}
 
             {/* Tracking Info & Analytics Section */}
@@ -1041,8 +1265,8 @@ const QRGenerator = () => {
               className="border-2 border-border rounded-lg p-4 bg-background"
               aria-label={copy("QR preview")}
             >
-              {qrValue ? (
-                <QRCodeStyled data={qrValue} design={design} width={192} />
+              {designPreviewValue ? (
+                <QRCodeStyled data={designPreviewValue} design={design} width={192} />
               ) : (
                 <div className="w-48 min-h-48 grid place-items-center text-muted-foreground text-sm text-center p-4">
                   {t("qrGenerator.enterUrlToGenerate")}
@@ -1054,53 +1278,42 @@ const QRGenerator = () => {
                 {copy("Use valid colors with enough contrast.")}
               </p>
             )}
-            {trackAnalytics && !qrValue && (
-              <p className="max-w-64 text-sm text-muted-foreground">
-                {copy(
-                  "Generate again after changing the destination or tracking mode.",
-                )}
+            {!qrValue && designPreviewValue && (
+              <p className="max-w-64 text-xs text-muted-foreground text-center">
+                {creation("Preview pattern. The final short URL is created in the last step.")}
               </p>
             )}
-            <div className="w-full">
-              <label
-                htmlFor="qr-format"
-                className="text-sm font-medium mb-2 block"
-              >
-                {t("qrGenerator.downloadFormat")}
-              </label>
-              <Select value={downloadFormat} onValueChange={setDownloadFormat}>
-                <SelectTrigger id="qr-format">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="png">{copy("PNG")}</SelectItem>
-                  <SelectItem value="svg">{copy("SVG")}</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            {qrValue && (
+              <QRDownloadDialog
+                data={qrValue}
+                design={design}
+                name={downloadName}
+                disabled={!validDesign || isGenerating}
+                onError={downloadFailed}
+              />
+            )}
             <Button
               size="lg"
-              className="w-full"
-              onClick={exportQR}
-              disabled={
-                !qrValue || !validDesign || isGenerating || isDownloading
-              }
-            >
-              {isDownloading ? copy("Downloading...") : copy("Download QR")}
-            </Button>
-            <Button
-              size="lg"
-              variant="outline"
+              variant={record ? "outline" : "default"}
               className="w-full"
               onClick={saveDesign}
               disabled={
                 isGenerating ||
-                !destination ||
                 !validDesign ||
+                (!record && !contentValid) ||
                 (Boolean(record) && !dirty)
               }
             >
-              {isGenerating ? copy("Saving...") : copy("Save QR design")}
+              {isGenerating ? (
+                <>
+                  <Loader2 className="w-4 h-4 me-2 animate-spin" aria-hidden="true" />
+                  {copy("Saving...")}
+                </>
+              ) : record ? (
+                copy("Save QR design")
+              ) : (
+                creation("Create QR code")
+              )}
             </Button>
             <p
               role="status"

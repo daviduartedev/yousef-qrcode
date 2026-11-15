@@ -18,7 +18,7 @@ export async function getQROverview(userId: string) {
   const row = {
     id: qrCodes.id,
     title: qrCodes.title,
-    destination: qrCodes.destinationUrl,
+    destination: sql<string>`case when ${qrCodes.qrType} = 'wifi' then 'Wi-Fi · ' || (${qrCodes.content}->>'ssid') else ${qrCodes.destinationUrl} end`,
     tracked: qrCodes.trackingEnabled,
     active: qrCodes.isActive,
     scans: qrCodes.totalScans,
