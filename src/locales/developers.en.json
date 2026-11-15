@@ -59,5 +59,6 @@
   "never used": "never used",
   "pending": "pending",
   "{{label}} — copy it now; it will not be shown again.": "{{label}} — copy it now; it will not be shown again.",
-  "This delivery is being sent. Try again in a few minutes.": "This delivery is being sent. Try again in a few minutes."
+  "This delivery is being sent. Try again in a few minutes.": "This delivery is being sent. Try again in a few minutes.",
+  "skipped": "skipped"
 }

@@ -423,10 +423,15 @@ export const webhooks = appSchema.table('webhooks', {
   userId: uuid('user_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
   url: varchar('url', { length: 2048 }).notNull(),
   events: jsonb('events').$type<string[]>().notNull(),
-  secretEncrypted: varchar('secret_encrypted', { length: 200 }).notNull(),
+  secretEncrypted: varchar('secret_encrypted', { length: 1000 }).notNull(),
   active: boolean('active').default(true).notNull(),
+  /** 'webhook' for signed webhooks; otherwise the integration connector (slack, hubspot, ga4). */
+  kind: varchar('kind', { length: 16 }).default('webhook').notNull(),
+  label: varchar('label', { length: 80 }),
+  /** Non-secret connector settings, such as the GA4 measurement id and a hint of the credential. */
+  config: jsonb('config').$type<Record<string, string>>().default({}).notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-}, table => [index('webhooks_user_idx').on(table.userId)]).enableRLS();
+}, table => [index('webhooks_user_idx').on(table.userId, table.kind)]).enableRLS();
 
 export const webhookDeliveries = appSchema.table('webhook_deliveries', {
   id: uuid('id').primaryKey().defaultRandom(),

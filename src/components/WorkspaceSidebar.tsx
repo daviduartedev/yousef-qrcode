@@ -1,6 +1,6 @@
 'use client';
 
-import { BarChart3, Building2, ChevronDown, Code2, Globe2, CircleHelp, ClipboardList, Contact, Images, LayoutDashboard, Link2, PanelLeftClose, PanelLeftOpen, Plus, QrCode } from 'lucide-react';
+import { BarChart3, Building2, ChevronDown, Code2, Globe2, CircleHelp, ClipboardList, Contact, Images, LayoutDashboard, Link2, PanelLeftClose, PanelLeftOpen, Plug, Plus, QrCode } from 'lucide-react';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { useId, useState, type MouseEvent } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -92,6 +92,8 @@ export function WorkspaceNavigation({ id, collapsed = false, onFollow }: {
       row + iconOnly + (pathname === '/settings/organization' ? ' bg-background' : ''))}
     {item('/settings/domains', 'Domains', Globe2, pathname === '/settings/domains',
       row + iconOnly + (pathname === '/settings/domains' ? ' bg-background' : ''))}
+    {item('/integrations', 'Integrations', Plug, pathname === '/integrations',
+      row + iconOnly + (pathname === '/integrations' ? ' bg-background' : ''))}
     {item('/settings/developers', 'API and webhooks', Code2, pathname === '/settings/developers',
       row + iconOnly + (pathname === '/settings/developers' ? ' bg-background' : ''))}
     {item('/app#how-to-create', 'QR Code guide', CircleHelp, false, row + iconOnly + ' mt-2')}

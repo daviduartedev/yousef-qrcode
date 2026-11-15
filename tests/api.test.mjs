@@ -1998,3 +1998,110 @@ test("webhooks are signed, retried, redelivered with the same id and never reach
     await receiver.close();
   }
 });
+
+/** Stands in for Slack, HubSpot and Google during tests (INTEGRATION_TEST_ORIGIN points every connector here). */
+async function connectorReceiver() {
+  const { createServer } = await import("node:http");
+  const received = [];
+  const answers = [];
+  const server = createServer((req, res) => {
+    let body = "";
+    req.on("data", (chunk) => { body += chunk; });
+    req.on("end", () => { received.push({ method: req.method, url: req.url, headers: req.headers, body }); const rule = answers.findIndex((item) => req.url.startsWith(item.path)); res.statusCode = rule >= 0 ? answers.splice(rule, 1)[0].status : 200; res.end("{}"); });
+  });
+  await new Promise((resolve) => server.listen(Number(process.env.TEST_INTEGRATION_PORT), "127.0.0.1", resolve));
+  return { received, answers, close: () => new Promise((resolve) => server.close(resolve)) };
+}
+
+test("integrations deliver to Slack, HubSpot and GA4 with their own credentials and stay private", async () => {
+  const owner = await register();
+  const other = await register();
+  const connector = await connectorReceiver();
+  try {
+    const slackUrl = "https://hooks.slack.com/services/T000TEST/B000TEST/abcdefghijklmnop";
+    // Dummy token, assembled so secret scanners do not mistake it for a real one.
+    const token = ["pat", "na1", "11111111-2222-3333-4444-555555555555"].join("-");
+    assert.equal((await request("/api/integrations", { method: "POST", cookie: owner, body: { kind: "slack", events: ["qr.scanned"], webhookUrl: "https://evil.example/services/x" } })).status, 400, "Slack only accepts hooks.slack.com");
+    assert.equal((await request("/api/integrations", { method: "POST", cookie: owner, body: { kind: "hubspot", events: ["qr.scanned"], token } })).status, 400, "HubSpot only receives card contacts");
+    assert.equal((await request("/api/integrations", { method: "POST", cookie: owner, body: { kind: "ga4", events: ["qr.scanned"], measurementId: "UA-1", apiSecret: "secret123" } })).status, 400);
+    const slack = await request("/api/integrations", { method: "POST", cookie: owner, body: { kind: "slack", label: "Vendas", events: ["qr.scanned", "card.contact"], webhookUrl: slackUrl } });
+    assert.equal(slack.status, 201);
+    const hubspot = await (await request("/api/integrations", { method: "POST", cookie: owner, body: { kind: "hubspot", events: ["card.contact"], token } })).json();
+    await request("/api/integrations", { method: "POST", cookie: owner, body: { kind: "ga4", events: ["qr.scanned"], measurementId: "G-TEST1234", apiSecret: "ga-secret-123" } });
+
+    const listed = await (await request("/api/integrations", { cookie: owner })).json();
+    assert.equal(listed.integrations.length, 3);
+    const text = JSON.stringify(listed);
+    assert.ok(!text.includes("abcdefghijklmnop") && !text.includes("555555555555") && !text.includes("ga-secret-123"), "credentials never come back");
+    assert.deepEqual(listed.integrations.map((item) => item.hint).sort(), ["G-TEST1234", "…5555", "…mnop"]);
+    assert.equal((await (await request("/api/integrations", { cookie: other })).json()).integrations.length, 0);
+    assert.equal((await (await request("/api/developers/webhooks", { cookie: owner })).json()).webhooks.length, 0, "integrations are not listed as webhooks");
+    assert.equal((await request(`/api/integrations/${hubspot.id}`, { method: "DELETE", cookie: other })).status, 404);
+    assert.equal((await request(`/api/developers/webhooks/${hubspot.id}`, { method: "DELETE", cookie: owner })).status, 404, "the webhook routes do not manage integrations");
+
+    const qr = (await (await request("/api/qr-codes", { method: "POST", cookie: owner, body: { title: "Loja <b>", destination_url: "https://example.test/l" } })).json()).qrCode;
+    await request(`/qr?code=${qr.short_code}`, { headers: { "user-agent": "Mozilla/5.0 (iPhone) Mobile Safari" } });
+    await waitFor(() => connector.received.filter((item) => item.method === "POST").length >= 2);
+    const slackCall = connector.received.find((item) => item.url.startsWith("/services/"));
+    assert.equal(slackCall.url, "/services/T000TEST/B000TEST/abcdefghijklmnop");
+    assert.match(JSON.parse(slackCall.body).text, /Loja &lt;b&gt;/, "visitor-controlled text is escaped for Slack");
+    const gaCall = connector.received.find((item) => item.url.startsWith("/mp/collect"));
+    const gaQuery = new URL(gaCall.url, "http://x").searchParams;
+    assert.equal(gaQuery.get("measurement_id"), "G-TEST1234");
+    assert.equal(gaQuery.get("api_secret"), "ga-secret-123");
+    assert.equal(JSON.parse(gaCall.body).events[0].name, "qr_scan");
+    assert.equal(connector.received.some((item) => item.headers.authorization), false, "the HubSpot token is not sent on scans");
+
+    const card = await newCard(owner);
+    await request(`/api/cards/${card.id}`, { method: "PATCH", cookie: owner, body: { draft: cardDraft(card) } });
+    await request(`/api/cards/${card.id}/publish`, { method: "POST", cookie: owner, body: { publish: true } });
+    const contact = (body) => request(`/c/${card.slug}/contact`, { method: "POST", body, headers: { origin: base, "content-type": "application/json" } });
+    const before = connector.received.length;
+    connector.answers.push({ path: "/crm/v3/objects/contacts", status: 503 });
+    assert.equal((await contact({ name: "Ana Lima", email: "Ana@Example.com", company: "Acme", consent: true })).status, 201);
+    const isCreate = (item) => item.method === "POST" && item.url === "/crm/v3/objects/contacts";
+    await waitFor(() => connector.received.some((item, index) => index >= before && isCreate(item)));
+    const crm = connector.received.find((item, index) => index >= before && isCreate(item));
+    assert.equal(crm.headers.authorization, `Bearer ${token}`);
+    assert.deepEqual(JSON.parse(crm.body), { properties: { email: "ana@example.com", firstname: "Ana", lastname: "Lima", company: "Acme" } });
+
+    await waitFor(() => connector.received.filter((item, index) => index >= before).length >= 2);
+    const deliveries = (await (await request(`/api/integrations/${hubspot.id}`, { cookie: owner })).json()).deliveries;
+    const crmDelivery = deliveries.find((item) => item.event === "card.contact");
+    if (crmDelivery.status === "pending") {
+      assert.ok(crmDelivery.next_attempt_at, "a connector that is down is retried without losing the contact");
+      const again = await (await request(`/api/integrations/deliveries/${crmDelivery.id}`, { method: "POST", cookie: owner })).json();
+      assert.equal(again.delivery.status, "delivered");
+    }
+    assert.equal((await request(`/api/integrations/deliveries/${crmDelivery.id}`, { method: "POST", cookie: other })).status, 404);
+
+    const phoneOnly = connector.received.length;
+    assert.equal((await contact({ name: "Rui", phone: "+351 900 000 000", consent: true })).status, 201);
+    await new Promise((resolve) => setTimeout(resolve, 800));
+    assert.equal(connector.received.slice(phoneOnly).some(isCreate), false, "contacts without email are skipped for HubSpot");
+    connector.answers.push({ path: "/crm/v3/objects/contacts", status: 409 });
+    const existing = connector.received.length;
+    await contact({ name: "Ana Impostora", email: "ana@example.com", consent: true });
+    await waitFor(() => connector.received.slice(existing).some(isCreate));
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    assert.ok((await (await request(`/api/integrations/${hubspot.id}`, { cookie: owner })).json()).deliveries.some((item) => item.last_error === "Contact already exists in HubSpot" && item.status === "skipped"), "existing CRM contacts are never overwritten");
+    assert.ok((await (await request(`/api/integrations/${hubspot.id}`, { cookie: owner })).json()).deliveries.some((item) => item.status === "skipped"));
+
+    const test = await (await request(`/api/integrations/${hubspot.id}/test`, { method: "POST", cookie: owner })).json();
+    assert.equal(test.delivery.status, "delivered");
+    const check = connector.received.at(-1);
+    assert.equal(check.method, "GET", "the HubSpot test only reads");
+    assert.match(check.url, /^\/crm\/v3\/objects\/contacts\?limit=1$/);
+
+    assert.equal((await request(`/api/integrations/${hubspot.id}`, { method: "PATCH", cookie: owner, body: { active: false, events: ["qr.scanned"] } })).status, 400);
+    assert.equal((await request(`/api/integrations/${hubspot.id}`, { method: "PATCH", cookie: owner, body: { active: false } })).status, 200);
+    const paused = connector.received.length;
+    await contact({ name: "Bia", email: "bia@example.com", consent: true });
+    await new Promise((resolve) => setTimeout(resolve, 800));
+    assert.equal(connector.received.slice(paused).some(isCreate), false, "paused integrations receive nothing");
+    assert.equal((await request(`/api/integrations/${hubspot.id}`, { method: "DELETE", cookie: owner })).status, 200);
+    assert.equal((await (await request("/api/integrations", { cookie: owner })).json()).integrations.length, 2);
+  } finally {
+    await connector.close();
+  }
+});

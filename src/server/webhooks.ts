@@ -3,18 +3,19 @@ import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, 
 import { lookup } from 'node:dns/promises';
 import { request as httpsRequest } from 'node:https';
 import { request as httpRequest } from 'node:http';
-import { and, desc, eq, inArray, lte, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, lte, ne, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { getDb } from '@/server/db';
 import { webhookDeliveries, webhooks } from '@/server/db/schema';
 import { HttpError } from '@/server/http';
 import { getServerEnv } from '@/server/env';
+import { connectorOrigins, ga4Event, hubspotContact, slackText } from '@/lib/integrations';
 import { apiLimits, blockedAddress, retryDelaysSeconds, webhookEvents, type DeliveryRecord, type WebhookEvent, type WebhookRecord } from '@/lib/developers';
 
 const id = z.uuid();
 const key = () => createHash('sha256').update(`webhook-secrets:${getServerEnv().secret}`).digest();
 
-function encrypt(value: string) {
+export function encrypt(value: string) {
   const iv = randomBytes(12);
   const cipher = createCipheriv('aes-256-gcm', key(), iv);
   const data = Buffer.concat([cipher.update(value, 'utf8'), cipher.final()]);
@@ -50,12 +51,12 @@ async function resolveTarget(value: string) {
 }
 
 /** Sends one request to the address resolved above (no second lookup, no redirects), with a 5 s timeout. */
-function post(target: Awaited<ReturnType<typeof resolveTarget>>, headers: Record<string, string>, body: string) {
+function post(target: Awaited<ReturnType<typeof resolveTarget>>, headers: Record<string, string>, body: string | null, method: 'POST' | 'GET' = 'POST') {
   return new Promise<number>((resolve, reject) => {
     const send = target.url.protocol === 'https:' ? httpsRequest : httpRequest;
     const req = send({
-      hostname: target.url.hostname, port: target.url.port || undefined, path: target.url.pathname + target.url.search, method: 'POST',
-      headers: { ...headers, 'content-type': 'application/json', 'content-length': Buffer.byteLength(body).toString(), 'user-agent': 'QRConnect-Webhooks/1' },
+      hostname: target.url.hostname, port: target.url.port || undefined, path: target.url.pathname + target.url.search, method,
+      headers: { ...headers, ...(body === null ? {} : { 'content-type': 'application/json', 'content-length': Buffer.byteLength(body).toString() }), 'user-agent': 'QRConnect-Webhooks/1' },
       lookup: (_hostname, _options, callback) => callback(null, target.address, target.family),
       timeout: apiLimits.timeoutMs,
     }, response => { response.resume(); response.on('end', () => resolve(response.statusCode ?? 0)); });
@@ -63,7 +64,7 @@ function post(target: Awaited<ReturnType<typeof resolveTarget>>, headers: Record
     req.on('timeout', () => req.destroy(new Error('Timed out')));
     req.on('error', reject);
     req.on('close', () => clearTimeout(deadline));
-    req.end(body);
+    req.end(body ?? undefined);
   });
 }
 
@@ -86,13 +87,15 @@ export async function attemptDelivery(deliveryId: string) {
     .where(and(eq(webhookDeliveries.id, deliveryId), eq(webhookDeliveries.attempts, attempts), eq(webhookDeliveries.status, 'pending')));
   // A paused webhook stops receiving events, retries included; an explicit test event still goes out.
   if (!row.hook.active && row.delivery.event !== 'ping') { await finish({ status: 'failed', lastError: 'Webhook paused', nextAttemptAt: null }); return; }
-  const body = JSON.stringify({ id: row.delivery.eventId, type: row.delivery.event, created_at: row.delivery.createdAt.toISOString(), data: row.delivery.payload });
-  const timestamp = Math.floor(Date.now() / 1000);
   let statusCode: number | null = null;
   let error: string | null = null;
   try {
-    const target = await resolveTarget(row.hook.url);
-    statusCode = await post(target, { 'qrconnect-event-id': row.delivery.eventId, 'qrconnect-signature': signature(decrypt(row.hook.secretEncrypted), timestamp, body) }, body);
+    const outgoing = row.hook.kind === 'webhook' ? webhookRequest(row) : connectorRequest(row.hook, row.delivery, decrypt(row.hook.secretEncrypted));
+    // Nothing to send: the delivery is closed and its visitor data erased right away.
+    if (!outgoing) { await finish({ status: 'skipped', lastError: 'Nothing to send for this event', nextAttemptAt: null, payload: {} }); return; }
+    const target = await resolveTarget(row.hook.kind === 'webhook' ? outgoing.url : testOrigin(outgoing.url));
+    statusCode = await post(target, outgoing.headers, outgoing.body, outgoing.method);
+    if (row.hook.kind === 'hubspot' && statusCode === 409) { await finish({ status: 'skipped', lastStatusCode: 409, lastError: 'Contact already exists in HubSpot', nextAttemptAt: null, payload: {} }); return; }
   } catch (cause) {
     error = cause instanceof HttpError ? cause.message : 'Connection failed';
   }
@@ -104,6 +107,52 @@ export async function attemptDelivery(deliveryId: string) {
     deliveredAt: delivered ? sql`now()` : null,
     nextAttemptAt: delivered || exhausted ? null : sql`now() + make_interval(secs => ${retryDelaysSeconds[Math.min(attempts - 1, retryDelaysSeconds.length - 1)]})`,
   });
+}
+
+type HookRow = typeof webhooks.$inferSelect;
+type DeliveryRow = typeof webhookDeliveries.$inferSelect;
+
+function webhookRequest(row: { hook: HookRow; delivery: DeliveryRow }) {
+  const body = JSON.stringify({ id: row.delivery.eventId, type: row.delivery.event, created_at: row.delivery.createdAt.toISOString(), data: row.delivery.payload });
+  const timestamp = Math.floor(Date.now() / 1000);
+  return { url: row.hook.url, method: 'POST' as const, body,
+    headers: { 'qrconnect-event-id': row.delivery.eventId, 'qrconnect-signature': signature(decrypt(row.hook.secretEncrypted), timestamp, body) } };
+}
+
+/** In local tests every connector host is replaced by the test receiver; never on Vercel or a public app address. */
+function testOrigin(value: string) {
+  const origin = process.env.INTEGRATION_TEST_ORIGIN;
+  if (!origin || !loopbackTests() || !/^http:\/\/(127\.0\.0\.1|localhost):\d+$/.test(origin)) return value;
+  const url = new URL(value);
+  return new URL(url.pathname + url.search, origin).href;
+}
+
+/**
+ * Request for an integration connector. The credential only ever goes to the connector's fixed host.
+ * Returns null when the event has nothing to send (for example a card contact without email for HubSpot).
+ */
+function connectorRequest(hook: HookRow, delivery: DeliveryRow, credential: string): { url: string; method: 'POST' | 'GET'; headers: Record<string, string>; body: string | null } | null {
+  const data = delivery.payload as Record<string, unknown>;
+  const ping = delivery.event === 'ping';
+  if (hook.kind === 'slack') {
+    if (!credential.startsWith(connectorOrigins.slack + '/')) throw new HttpError(400, 'Invalid connector settings');
+    return { url: credential, method: 'POST', headers: {}, body: JSON.stringify({ text: slackText(delivery.event, data), mrkdwn: false, unfurl_links: false, unfurl_media: false }) };
+  }
+  if (hook.kind === 'hubspot') {
+    const headers = { authorization: `Bearer ${credential}` };
+    // The test only checks that the token can read contacts; it never creates one.
+    if (ping) return { url: `${connectorOrigins.hubspot}/crm/v3/objects/contacts?limit=1`, method: 'GET', headers, body: null };
+    const contact = delivery.event === 'card.contact' ? hubspotContact(data) : null;
+    return contact && { url: `${connectorOrigins.hubspot}/crm/v3/objects/contacts`, method: 'POST', headers, body: JSON.stringify(contact) };
+  }
+  if (hook.kind === 'ga4') {
+    const query = new URLSearchParams({ measurement_id: hook.config.measurementId ?? '', api_secret: credential });
+    // The test goes to the validation endpoint, which records nothing.
+    const path = ping ? '/debug/mp/collect' : '/mp/collect';
+    if (!ping && delivery.event !== 'qr.scanned') return null;
+    return { url: `${connectorOrigins.ga4}${path}?${query}`, method: 'POST', headers: {}, body: JSON.stringify(ga4Event(ping ? { title: 'QRConnect test' } : data, delivery.eventId)) };
+  }
+  return null;
 }
 
 /** Queues an event for every active webhook of the workspace that subscribes to it, then tries them after the response. */
@@ -128,7 +177,7 @@ export async function emitEvent(workspaceId: string, event: WebhookEvent, data: 
 export async function processDueDeliveries(budgetMs = 45_000) {
   const started = Date.now();
   // Finished deliveries, with their payloads, are kept for 30 days.
-  await getDb().delete(webhookDeliveries).where(and(inArray(webhookDeliveries.status, ['delivered', 'failed']), lte(webhookDeliveries.createdAt, sql`now() - interval '30 days'`)));
+  await getDb().delete(webhookDeliveries).where(and(inArray(webhookDeliveries.status, ['delivered', 'failed', 'skipped']), lte(webhookDeliveries.createdAt, sql`now() - interval '30 days'`)));
   let processed = 0;
   while (Date.now() - started < budgetMs) {
     const due = await getDb().select({ id: webhookDeliveries.id }).from(webhookDeliveries)
@@ -143,7 +192,7 @@ export async function processDueDeliveries(budgetMs = 45_000) {
 const hookRecord = (row: typeof webhooks.$inferSelect): WebhookRecord => ({ id: row.id, url: row.url, events: row.events as WebhookEvent[], active: row.active, created_at: row.createdAt.toISOString() });
 
 export async function listWebhooks(workspaceId: string) {
-  const rows = await getDb().select().from(webhooks).where(eq(webhooks.userId, workspaceId)).orderBy(desc(webhooks.createdAt));
+  const rows = await getDb().select().from(webhooks).where(and(eq(webhooks.userId, workspaceId), eq(webhooks.kind, 'webhook'))).orderBy(desc(webhooks.createdAt));
   return rows.map(hookRecord);
 }
 
@@ -157,32 +206,32 @@ export async function createWebhook(workspaceId: string, input: unknown) {
   const secret = `whsec_${randomBytes(24).toString('base64url')}`;
   return getDb().transaction(async tx => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${'webhooks:' + workspaceId}))`);
-    const [{ total }] = await tx.select({ total: sql<number>`count(*)::int` }).from(webhooks).where(eq(webhooks.userId, workspaceId));
+    const [{ total }] = await tx.select({ total: sql<number>`count(*)::int` }).from(webhooks).where(and(eq(webhooks.userId, workspaceId), eq(webhooks.kind, 'webhook')));
     if (total >= apiLimits.webhooksPerWorkspace) throw new HttpError(409, 'You reached the webhook limit');
     const [row] = await tx.insert(webhooks).values({ userId: workspaceId, url: new URL(parsed.data.url).href, events: [...new Set(parsed.data.events)], secretEncrypted: encrypt(secret) }).returning();
     return { webhook: hookRecord(row), secret };
   });
 }
 
-export async function updateWebhook(workspaceId: string, hookId: string, input: unknown) {
+export async function updateWebhook(workspaceId: string, hookId: string, input: unknown, kind = 'webhook') {
   const parsed = z.object({ active: z.boolean().optional(), events: z.array(z.enum(webhookEvents)).min(1).optional() }).strict().safeParse(input);
   if (!parsed.success || !id.safeParse(hookId).success) throw new HttpError(400, 'Invalid webhook changes');
   const [row] = await getDb().update(webhooks).set({ ...(parsed.data.active !== undefined ? { active: parsed.data.active } : {}), ...(parsed.data.events ? { events: [...new Set(parsed.data.events)] } : {}) })
-    .where(and(eq(webhooks.userId, workspaceId), eq(webhooks.id, hookId))).returning();
+    .where(and(eq(webhooks.userId, workspaceId), eq(webhooks.id, hookId), kindFilter(kind))).returning();
   if (!row) throw new HttpError(404, 'Webhook not found');
   return hookRecord(row);
 }
 
-export async function deleteWebhook(workspaceId: string, hookId: string) {
+export async function deleteWebhook(workspaceId: string, hookId: string, kind = 'webhook') {
   if (!id.safeParse(hookId).success) throw new HttpError(404, 'Webhook not found');
-  const [row] = await getDb().delete(webhooks).where(and(eq(webhooks.userId, workspaceId), eq(webhooks.id, hookId))).returning({ id: webhooks.id });
+  const [row] = await getDb().delete(webhooks).where(and(eq(webhooks.userId, workspaceId), eq(webhooks.id, hookId), kindFilter(kind))).returning({ id: webhooks.id });
   if (!row) throw new HttpError(404, 'Webhook not found');
   return { deleted: true };
 }
 
-export async function listDeliveries(workspaceId: string, hookId: string): Promise<DeliveryRecord[]> {
+export async function listDeliveries(workspaceId: string, hookId: string, kind = 'webhook'): Promise<DeliveryRecord[]> {
   if (!id.safeParse(hookId).success) throw new HttpError(404, 'Webhook not found');
-  const [hook] = await getDb().select({ id: webhooks.id }).from(webhooks).where(and(eq(webhooks.userId, workspaceId), eq(webhooks.id, hookId)));
+  const [hook] = await getDb().select({ id: webhooks.id }).from(webhooks).where(and(eq(webhooks.userId, workspaceId), eq(webhooks.id, hookId), kindFilter(kind)));
   if (!hook) throw new HttpError(404, 'Webhook not found');
   const rows = await getDb().select({ delivery: webhookDeliveries }).from(webhookDeliveries).innerJoin(webhooks, eq(webhooks.id, webhookDeliveries.webhookId))
     .where(and(eq(webhooks.userId, workspaceId), eq(webhooks.id, hookId))).orderBy(desc(webhookDeliveries.createdAt)).limit(50);
@@ -194,10 +243,10 @@ export async function listDeliveries(workspaceId: string, hookId: string): Promi
 }
 
 /** Sends a delivery again now, keeping its event id. Refused while an attempt is in flight (the claim pushes the next attempt ahead). */
-export async function redeliver(workspaceId: string, deliveryId: string) {
+export async function redeliver(workspaceId: string, deliveryId: string, kind = 'webhook') {
   if (!id.safeParse(deliveryId).success) throw new HttpError(404, 'Delivery not found');
   const [row] = await getDb().select({ id: webhookDeliveries.id }).from(webhookDeliveries).innerJoin(webhooks, eq(webhooks.id, webhookDeliveries.webhookId))
-    .where(and(eq(webhooks.userId, workspaceId), eq(webhookDeliveries.id, deliveryId)));
+    .where(and(eq(webhooks.userId, workspaceId), eq(webhookDeliveries.id, deliveryId), kindFilter(kind)));
   if (!row) throw new HttpError(404, 'Delivery not found');
   const [reset] = await getDb().update(webhookDeliveries).set({ status: 'pending', attempts: 0, nextAttemptAt: sql`now()` })
     .where(and(eq(webhookDeliveries.id, deliveryId), sql`(${webhookDeliveries.status} <> 'pending' or ${webhookDeliveries.nextAttemptAt} is null or ${webhookDeliveries.nextAttemptAt} <= now() + interval '1 minute' or ${webhookDeliveries.nextAttemptAt} > now() + interval '2 minutes')`))
@@ -209,18 +258,18 @@ export async function redeliver(workspaceId: string, deliveryId: string) {
 
 async function listDeliveriesById(deliveryId: string) {
   const [delivery] = await getDb().select().from(webhookDeliveries).where(eq(webhookDeliveries.id, deliveryId));
-  return { id: delivery.id, status: delivery.status, attempts: delivery.attempts, last_status_code: delivery.lastStatusCode };
+  return { id: delivery.id, status: delivery.status, attempts: delivery.attempts, last_status_code: delivery.lastStatusCode, last_error: delivery.lastError };
 }
 
 /** A test event to check the receiver and its signature check. */
-export async function pingWebhook(workspaceId: string, hookId: string) {
+export async function pingWebhook(workspaceId: string, hookId: string, kind = 'webhook') {
   if (!id.safeParse(hookId).success) throw new HttpError(404, 'Webhook not found');
-  const [hook] = await getDb().select().from(webhooks).where(and(eq(webhooks.userId, workspaceId), eq(webhooks.id, hookId)));
+  const [hook] = await getDb().select().from(webhooks).where(and(eq(webhooks.userId, workspaceId), eq(webhooks.id, hookId), kindFilter(kind)));
   if (!hook) throw new HttpError(404, 'Webhook not found');
   const [{ recent }] = await getDb().select({ recent: sql<number>`count(*)::int` }).from(webhookDeliveries)
     .where(and(eq(webhookDeliveries.webhookId, hook.id), eq(webhookDeliveries.event, 'ping'), sql`${webhookDeliveries.createdAt} > now() - interval '1 minute'`));
   if (recent >= 5) throw new HttpError(429, 'Too many requests. Wait for the next minute.');
-  const [row] = await getDb().insert(webhookDeliveries).values({ webhookId: hook.id, eventId: randomUUID(), event: 'ping', payload: { message: 'QRConnect webhook test' }, status: 'pending', nextAttemptAt: sql`now()` }).returning({ id: webhookDeliveries.id });
+  const [row] = await getDb().insert(webhookDeliveries).values({ webhookId: hook.id, eventId: randomUUID(), event: 'ping', payload: { message: 'QRConnect test' }, status: 'pending', nextAttemptAt: sql`now()` }).returning({ id: webhookDeliveries.id });
   await attemptDelivery(row.id);
   return listDeliveriesById(row.id);
 }
@@ -232,4 +281,9 @@ export async function emitAndDeliver(workspaceId: string, event: WebhookEvent, d
   } catch {
     console.error(`Webhook event ${event} could not be queued.`);
   }
+}
+
+/** 'webhook' for signed webhooks, 'integration' for any connector. */
+function kindFilter(kind: string) {
+  return kind === 'integration' ? ne(webhooks.kind, 'webhook') : eq(webhooks.kind, kind);
 }
