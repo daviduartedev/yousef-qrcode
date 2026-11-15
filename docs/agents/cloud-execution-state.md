@@ -6,8 +6,8 @@ Checkpoint persistente da execução dos lotes do [roteiro na nuvem](execucao-ro
 
 | Item | Valor |
 |---|---|
-| Último lote integrado na `main` | 6 — PR #26, merge `e905477` (commit do lote `c1f19fb`); deploy da Vercel concluído; migração `0005` aplicada e verificada no Neon de homologação |
-| Lote em integração | 7 — branch `feat/lote-07-analytics-ciclo-de-vida`, sem migração |
+| Lote anterior | 6 — PR #26, merge `e905477` (commit do lote `c1f19fb`); deploy da Vercel concluído; migração `0005` aplicada e verificada no Neon de homologação |
+| Último lote integrado | 7 — PR #27, merge `ec65d95` (commit do lote `bba47dd`); deploy da Vercel concluído; sem migração |
 | Próximo lote | 8 — site público e entrada (P01, P02); independe de 6 e 7 |
 | Depois | 9 — biblioteca de arquivos; exige armazenamento de objetos compatível com a Vercel e credencial de teste autorizada |
 
@@ -17,7 +17,7 @@ Checkpoint persistente da execução dos lotes do [roteiro na nuvem](execucao-ro
 |---|---|---|---|---|
 | 1–5 | Integrados antes desta execução | `f0c6f61` | ver especificações | homologação |
 | 6 | Integrado e verificado | `c1f19fb`, merge `e905477` | unit 5/5, API 23/23, ops 4/4, navegador 21/21, upgrade `0004→0005` ok, CI verde | Vercel ok; smoke HTTP sem sessão ok; fluxos autenticados hospedados aguardam conta autorizada |
-| 7 | Verificado localmente; ver o PR do lote | ver histórico | unit 9/9, API 26/26, ops 4/4, navegador 12/12 | após merge |
+| 7 | Integrado e verificado | `bba47dd`, merge `ec65d95` | unit 9/9, API 26/26, ops 4/4, navegador 12/12, CI verde | Vercel ok; smoke HTTP sem sessão ok (`/analytics` 307, APIs 401) |
 | 8–20 | Não iniciados | — | — | — |
 
 ## Bloqueios e pendências
