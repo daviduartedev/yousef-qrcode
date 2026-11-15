@@ -53,7 +53,8 @@ export function QRScanPerformance({ history }: { history: { day: string; scans: 
         {series.map(({ label, values, color }) => <div key={label}>
           <dt className="flex items-center gap-2 text-sm"><span className={`size-2 shrink-0 rounded-full ${color}`} aria-hidden="true" />{copy(label)}</dt>
           <dd className="mt-1 text-xl font-semibold tabular-nums">{number.format(values.reduce((sum, value) => sum + value.scans, 0))}</dd>
-          <dd className="mt-1 text-xs text-muted-foreground">{dates.formatRange(parseDay(values[0].day), parseDay(values[values.length - 1].day))}</dd>
+          <dd className="mt-1 text-xs text-muted-foreground">{/* Built by hand: server and browser ICU disagree on formatRange spacing, which broke hydration. */}
+            {`${dates.format(parseDay(values[0].day))} – ${dates.format(parseDay(values[values.length - 1].day))}`}</dd>
         </div>)}
       </dl>
     </div>

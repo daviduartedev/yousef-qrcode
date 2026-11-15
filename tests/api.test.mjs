@@ -71,7 +71,7 @@ async function createManagedCode(cookie, title, destination, tracked = true) {
 test("overview totals describe only the signed-in account", async () => {
   const anonymous = await request("/overview");
   assert.equal(anonymous.status, 307);
-  assert.equal(anonymous.headers.get("location"), "/auth");
+  assert.equal(anonymous.headers.get("location"), "/auth?next=%2Foverview");
   const owner = await register();
   const stranger = await register();
   const other = await createManagedCode(stranger, "Private campaign from another account", "https://example.test/private");
@@ -915,4 +915,138 @@ test("lifecycle states classify tracked codes and filter the list", async () => 
   const overview = await (await request("/overview", { cookie: owner })).text();
   for (const [label, count] of [["New", 1], ["Active", 1], ["Declining", 1], ["No scans", 1], ["Paused", 1], ["Direct QR Codes", 1]])
     assert.match(overview, new RegExp(`>${label}<!-- --> \\(<!-- -->${count}<!-- -->\\)`), label);
+});
+
+async function outboxMessage(to, kind) {
+  const { readdir, readFile } = await import("node:fs/promises");
+  const directory = process.env.TEST_EMAIL_OUTBOX_DIR;
+  assert.ok(directory, "The API runner must configure the local email outbox.");
+  const deadline = Date.now() + 5000;
+  while (Date.now() < deadline) {
+    for (const name of (await readdir(directory).catch(() => [])).sort()) {
+      const message = JSON.parse(await readFile(`${directory}/${name}`, "utf8"));
+      if (message.to === to && message.kind === kind) return message;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  return null;
+}
+const cookieOf = (response) => response.headers.getSetCookie().map((value) => value.split(";")[0]).join("; ");
+
+test("private pages send anonymous visitors to sign in with a safe return address", async () => {
+  const cases = [["/overview", "/overview"], ["/analytics?qr=abc&preset=7", "/analytics?qr=abc&preset=7"], ["/app?edit=123", "/app?edit=123"]];
+  for (const [path, next] of cases) {
+    const response = await request(path);
+    assert.equal(response.status, 307);
+    const location = new URL(response.headers.get("location"), base);
+    assert.equal(location.pathname, "/auth");
+    assert.equal(location.searchParams.get("next"), next);
+  }
+  for (const path of ["/auth", "/auth?mode=signup", "/auth/forgot-password", "/auth/reset-password?token=bogus-token-1234"]) {
+    const response = await request(path);
+    assert.equal(response.status, 200, path);
+    assert.match(response.headers.get("x-robots-tag") ?? (await response.text()), /noindex/i, path);
+  }
+  const robots = await (await request("/robots.txt")).text();
+  assert.match(robots, /Disallow: \/api\//);
+  assert.match(robots, /Disallow: \/my-qrcodes/);
+  const sitemap = await (await request("/sitemap.xml")).text();
+  assert.match(sitemap, /<loc>http:\/\/localhost:\d+\/<\/loc>/);
+  assert.doesNotMatch(sitemap, /overview|my-qrcodes|auth/);
+});
+
+test("sign-up sends a bilingual confirmation link that verifies the address", async () => {
+  const profile = account();
+  const signUp = await request("/api/auth/sign-up/email", {
+    method: "POST",
+    body: { ...profile, callbackURL: "/auth?verified=1&next=%2Foverview" },
+  });
+  assert.equal(signUp.status, 200);
+  const cookie = cookieOf(signUp);
+  assert.equal((await (await request("/api/auth/get-session", { cookie })).json()).user.emailVerified, false);
+  const message = await outboxMessage(profile.email, "verify-email");
+  assert.ok(message, "verification email");
+  assert.match(message.text, /Confirm the email address/);
+  assert.match(message.text, /أكّد عنوان البريد/);
+  const link = new URL(message.url);
+  assert.equal(link.origin, base);
+  const verify = await request(link.pathname + link.search);
+  assert.equal(verify.status, 302);
+  const landing = new URL(verify.headers.get("location"), base);
+  assert.equal(landing.pathname, "/auth");
+  assert.equal(landing.searchParams.get("verified"), "1");
+  assert.equal(landing.searchParams.get("error"), null);
+  assert.equal((await (await request("/api/auth/get-session", { cookie })).json()).user.emailVerified, true);
+  const reused = await request(link.pathname + "?token=not-a-valid-token&callbackURL=%2Fauth%3Fverified%3D1");
+  assert.match(new URL(reused.headers.get("location"), base).searchParams.get("error") ?? "", /token/i);
+});
+
+test("password reset is single-use, signs out other sessions and never reveals unknown accounts", async () => {
+  const profile = account();
+  const signUp = await request("/api/auth/sign-up/email", { method: "POST", body: profile });
+  const oldCookie = cookieOf(signUp);
+  const unknown = await request("/api/auth/request-password-reset", {
+    method: "POST",
+    body: { email: `nobody-${randomUUID()}@example.test`, redirectTo: "/auth/reset-password" },
+  });
+  const known = await request("/api/auth/request-password-reset", {
+    method: "POST",
+    body: { email: profile.email, redirectTo: "/auth/reset-password" },
+  });
+  assert.equal(unknown.status, 200);
+  assert.equal(known.status, 200);
+  assert.deepEqual(await unknown.json(), await known.json());
+  const foreign = await request("/api/auth/request-password-reset", {
+    method: "POST",
+    body: { email: profile.email, redirectTo: "https://evil.example/steal" },
+  });
+  assert.equal(foreign.status, 403);
+  const message = await outboxMessage(profile.email, "reset-password");
+  assert.ok(message, "reset email");
+  assert.match(message.text, /reset the password/);
+  assert.match(message.html, /dir="rtl"/);
+  const link = new URL(message.url);
+  const callback = await request(link.pathname + link.search);
+  assert.equal(callback.status, 302);
+  const page = new URL(callback.headers.get("location"), base);
+  assert.equal(page.pathname, "/auth/reset-password");
+  const token = page.searchParams.get("token");
+  assert.ok(token);
+  const shortPassword = await request("/api/auth/reset-password", { method: "POST", body: { newPassword: "short", token } });
+  assert.equal(shortPassword.status, 400);
+  const newPassword = randomUUID();
+  const reset = await request("/api/auth/reset-password", { method: "POST", body: { newPassword, token } });
+  assert.equal(reset.status, 200);
+  assert.equal(await (await request("/api/auth/get-session", { cookie: oldCookie })).json(), null, "old session revoked");
+  const reuse = await request("/api/auth/reset-password", { method: "POST", body: { newPassword: randomUUID(), token } });
+  assert.equal(reuse.status, 400);
+  assert.equal((await request("/api/auth/sign-in/email", { method: "POST", body: profile })).status, 401);
+  const signIn = await request("/api/auth/sign-in/email", { method: "POST", body: { email: profile.email, password: newPassword } });
+  assert.equal(signIn.status, 200);
+  const expired = await request(link.pathname + link.search);
+  assert.equal(new URL(expired.headers.get("location"), base).searchParams.get("error"), "INVALID_TOKEN");
+});
+
+test("account email is capped per account without changing the public answer", async () => {
+  const { readdir, readFile } = await import("node:fs/promises");
+  const profile = account();
+  await request("/api/auth/sign-up/email", { method: "POST", body: profile });
+  const answers = [];
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const response = await request("/api/auth/request-password-reset", {
+      method: "POST",
+      body: { email: profile.email, redirectTo: "/auth/reset-password" },
+    });
+    assert.equal(response.status, 200);
+    answers.push(JSON.stringify(await response.json()));
+  }
+  assert.equal(new Set(answers).size, 1);
+  await new Promise((resolve) => setTimeout(resolve, 1500));
+  const directory = process.env.TEST_EMAIL_OUTBOX_DIR;
+  let sent = 0;
+  for (const name of await readdir(directory)) {
+    const message = JSON.parse(await readFile(`${directory}/${name}`, "utf8"));
+    if (message.to === profile.email && message.kind === "reset-password") sent++;
+  }
+  assert.equal(sent, 3);
 });

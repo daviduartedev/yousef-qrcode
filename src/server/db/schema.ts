@@ -126,3 +126,11 @@ export const qrScans = appSchema.table('qr_scans', {
   city: varchar('city', { length: 100 }),
   region: varchar('region', { length: 100 }),
 }, table => [index('qr_scans_code_time_idx').on(table.qrCodeId, table.scannedAt)]).enableRLS();
+
+/** One row per account email sent; used to cap how often a single account can be emailed. */
+export const accountEmailDispatches = appSchema.table('account_email_dispatches', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  kind: varchar('kind', { length: 32 }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, table => [index('account_email_dispatches_user_kind_time_idx').on(table.userId, table.kind, table.createdAt)]).enableRLS();

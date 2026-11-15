@@ -61,6 +61,6 @@ O trial da Uniqode pede login no executor. A comparação usa a auditoria arquiv
 
 ## Limitações e defeito existente
 
-- **Defeito anterior ao lote:** o `/overview` de produção emite o erro de hidratação React #418 (texto), também na `main` sem este lote. A página funciona; a causa fica para correção separada.
+- **Defeito anterior ao lote (corrigido no Lote 8):** o `/overview` de produção emitia o erro de hidratação React #418 (texto).
 - Em homologação, `TRUST_PROXY_HEADERS` não está confirmado como `true`. Até a configuração ser revisada pelo proprietário, scanners únicos e deduplicação ficam inativos lá, e a interface informa isso.
 - O ciclo de vida é calculado a cada leitura. Volumes muito altos pedem uma tabela diária agregada em lote futuro.

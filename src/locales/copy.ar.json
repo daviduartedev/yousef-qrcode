@@ -440,5 +440,17 @@
   "Before": "قبل",
   "After": "بعد",
   "QR Codes": "رموز QR",
-  "Open analytics": "فتح التحليلات"
+  "Open analytics": "فتح التحليلات",
+  "Main": "الرئيسية",
+  "Open dashboard": "فتح لوحة التحكم",
+  "Close menu": "إغلاق القائمة",
+  "Open menu": "فتح القائمة",
+  "FAQ": "الأسئلة الشائعة",
+  "Explore features": "استكشف المزايا",
+  "Skip to content": "تخطَّ إلى المحتوى",
+  "Industries": "القطاعات",
+  "Account": "الحساب",
+  "Create account": "إنشاء حساب",
+  "Reset password": "إعادة تعيين كلمة المرور",
+  "© 2026 QRConnect. All rights reserved.": "© 2026 QRConnect. جميع الحقوق محفوظة."
 }

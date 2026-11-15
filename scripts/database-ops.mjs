@@ -9,8 +9,8 @@ import { Pool } from 'pg';
 class OperationError extends Error {}
 const tables = ['user', 'account', 'session', 'verification', 'qr_codes', 'qr_scans'];
 const organizationTables = ['qr_folders', 'qr_labels', 'qr_code_labels'];
-// Added by migration 0005; older schemas without it remain valid backup sources.
-const historyTables = ['qr_destination_changes'];
+// Tables added by later migrations (0005+). Each is verified when present, so older schemas remain valid backup sources.
+const laterTables = ['qr_destination_changes', 'account_email_dispatches'];
 
 function backupDirectory(input, create = false) {
   if (!input) throw new OperationError('Provide a private backup directory.');
@@ -90,8 +90,8 @@ async function inspect(pool, environment) {
   const { rows: relations } = await pool.query(`SELECT relname, relrowsecurity
     FROM pg_class JOIN pg_namespace ON pg_namespace.oid = relnamespace WHERE nspname = 'qrconnect' AND relkind = 'r'`);
   const hasOrganization = relations.some(row => organizationTables.includes(row.relname));
-  const hasHistory = relations.some(row => historyTables.includes(row.relname));
-  const expected = [...tables, ...(hasOrganization ? organizationTables : []), ...(hasHistory ? historyTables : [])];
+  const present = new Set(relations.map(row => row.relname));
+  const expected = [...tables, ...(hasOrganization ? organizationTables : []), ...laterTables.filter(name => present.has(name))];
   const counts = {};
   for (const name of expected) {
     const { rows } = await pool.query(`SELECT count(*)::text AS count FROM qrconnect."${name}"`);

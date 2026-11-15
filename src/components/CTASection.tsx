@@ -3,13 +3,12 @@ import { useTranslation } from 'react-i18next';
 
 import { useEffect, useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
-import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 
 export const CTASection = () => {
   const { t: copy } = useTranslation('copy');
   const [isVisible, setIsVisible] = useState(false);
   const sectionRef = useRef<HTMLDivElement>(null);
-  const navigate = useRouter().push;
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -45,18 +44,18 @@ export const CTASection = () => {
             {copy("Join thousands of businesses using QRConnect to create powerful, trackable campaigns.")}</p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Button
+              asChild
               size="lg"
               className="bg-white text-primary hover:bg-white/90 rounded-lg px-8 h-12 font-medium"
-              onClick={() => navigate('/app')}
             >
-              {copy("Start Free Trial")}</Button>
+              <Link href="/auth?mode=signup">{copy("Start Free Trial")}</Link></Button>
             <Button
+              asChild
               size="lg"
               variant="outline"
               className="border-2 border-white text-white hover:bg-white/10 rounded-lg px-8 h-12 font-medium bg-transparent"
-              onClick={() => navigate('/app')}
             >
-              {copy("Book a Demo")}</Button>
+              <Link href="/auth">{copy("Login")}</Link></Button>
           </div>
         </div>
       </div>

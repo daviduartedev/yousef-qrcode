@@ -32,7 +32,7 @@ export const AnalyticsSection = () => {
   }, []);
 
   return (
-    <section ref={sectionRef} className="py-16 md:py-24 bg-background">
+    <section id="analytics" ref={sectionRef} className="scroll-mt-20 py-16 md:py-24 bg-background">
       <div className="container mx-auto px-4">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
           {/* Left Content */}

@@ -65,8 +65,9 @@ export const FeaturesSection = () => {
 
   return (
     <section
+      id="features"
       ref={sectionRef}
-      className="py-16 md:py-24 bg-secondary"
+      className="scroll-mt-20 py-16 md:py-24 bg-secondary"
     >
       <div className="container mx-auto px-4">
         {/* Header */}
@@ -102,16 +103,10 @@ export const FeaturesSection = () => {
                 <h3 className="text-lg font-semibold text-foreground mb-3">
                   {copy(feature.title)}
                 </h3>
-                <p className="text-muted-foreground text-sm leading-relaxed mb-4">
+                <p className="text-muted-foreground text-sm leading-relaxed">
                   {copy(feature.description)}
                 </p>
 
-                {/* Link */}
-                <a
-                  href="#"
-                  className="inline-flex items-center text-primary text-sm font-medium hover:underline transition-colors"
-                >
-                  {copy("Learn More →")}</a>
               </div>
             );
           })}

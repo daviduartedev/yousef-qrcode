@@ -64,7 +64,7 @@ export const IndustriesSection = () => {
   }, []);
 
   return (
-    <section ref={sectionRef} className="py-16 md:py-24 bg-secondary">
+    <section id="industries" ref={sectionRef} className="scroll-mt-20 py-16 md:py-24 bg-secondary">
       <div className="container mx-auto px-4">
         {/* Header */}
         <div

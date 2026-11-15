@@ -1,4 +1,5 @@
 import { requirePageSession } from '@/server/session';
+import { requestedPath } from '@/lib/auth-paths';
 import { redirect } from 'next/navigation';
 import { qrListHref, readQRListQuery } from '@/lib/qr-list';
 import { listCodePage } from '@/server/qr-codes';
@@ -9,9 +10,10 @@ export const runtime = 'nodejs';
 export default async function MyCodes({ searchParams }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const { user } = await requirePageSession();
+  const raw = await searchParams;
+  const { user } = await requirePageSession(requestedPath('/my-qrcodes', raw));
   const params = new URLSearchParams();
-  for (const [key, value] of Object.entries(await searchParams)) {
+  for (const [key, value] of Object.entries(raw)) {
     if (typeof value === 'string') params.set(key, value);
   }
   const query = readQRListQuery(params);

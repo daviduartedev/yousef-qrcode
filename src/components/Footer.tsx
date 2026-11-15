@@ -1,18 +1,25 @@
+'use client';
+import Link from 'next/link';
 import { useTranslation } from 'react-i18next';
-import { Facebook, Twitter, Linkedin, Instagram } from 'lucide-react';
 
-const footerLinks = {
-  Product: ['Dynamic QR Codes', 'Digital Cards', 'Analytics', 'Integrations'],
-  Solutions: ['Marketing', 'Sales', 'Events', 'Retail'],
-  Company: ['About Us', 'Careers', 'Blog', 'Contact'],
-  Legal: ['Privacy', 'Terms', 'Security', 'Cookies'],
-};
-
-const socialLinks = [
-  { icon: Facebook, href: '#' },
-  { icon: Twitter, href: '#' },
-  { icon: Linkedin, href: '#' },
-  { icon: Instagram, href: '#' },
+// Only destinations that exist. Company, legal and social pages need owner-approved content before they are linked.
+const footerLinks = [
+  { title: 'Product', links: [
+    { href: '/#features', label: 'Dynamic QR Codes' },
+    { href: '/#analytics', label: 'Analytics' },
+    { href: '/#integrations', label: 'Integrations' },
+    { href: '/#pricing', label: 'Pricing' },
+  ] },
+  { title: 'Solutions', links: [
+    { href: '/#industries', label: 'Industries' },
+    { href: '/#security', label: 'Security' },
+    { href: '/#faq', label: 'FAQ' },
+  ] },
+  { title: 'Account', links: [
+    { href: '/auth?mode=signup', label: 'Create account' },
+    { href: '/auth', label: 'Login' },
+    { href: '/auth/forgot-password', label: 'Reset password' },
+  ] },
 ];
 
 export const Footer = () => {
@@ -20,53 +27,30 @@ export const Footer = () => {
   return (
     <footer className="bg-foreground text-background py-12 md:py-16">
       <div className="container mx-auto px-4">
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-8 mb-12">
-          {/* Brand */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-12">
           <div className="col-span-2 md:col-span-1">
-            <h3 className="text-xl font-bold mb-4">QRConnect</h3>
-            <p className="text-background/60 text-sm mb-4">
-              {copy("Modern QR Code and Digital Business Card platform for forward-thinking teams.")}</p>
-            {/* Social Links */}
-            <div className="flex gap-3">
-              {socialLinks.map((social, index) => {
-                const IconComponent = social.icon;
-                return (
-                  <a
-                    key={index}
-                    href={social.href}
-                    className="w-8 h-8 rounded-full bg-background/10 flex items-center justify-center hover:bg-background/20 transition-colors"
-                  >
-                    <IconComponent className="w-4 h-4" />
-                  </a>
-                );
-              })}
-            </div>
+            <p className="text-xl font-bold mb-4">QRConnect</p>
+            <p className="text-background/70 text-sm">
+              {copy('Modern QR Code and Digital Business Card platform for forward-thinking teams.')}
+            </p>
           </div>
-
-          {/* Links */}
-          {Object.entries(footerLinks).map(([category, links]) => (
-            <div key={category}>
-              <h4 className="font-semibold mb-4 text-sm">{copy(category)}</h4>
+          {footerLinks.map((group) => (
+            <nav key={group.title} aria-label={copy(group.title)}>
+              <h2 className="font-semibold mb-4 text-sm">{copy(group.title)}</h2>
               <ul className="space-y-2">
-                {links.map((link) => (
-                  <li key={link}>
-                    <a
-                      href="#"
-                      className="text-background/60 text-sm hover:text-background transition-colors"
-                    >
-                      {copy(link)}
-                    </a>
+                {group.links.map((link) => (
+                  <li key={link.href}>
+                    {link.href.startsWith('/#')
+                      ? <a href={link.href} className="text-background/70 text-sm hover:text-background transition-colors">{copy(link.label)}</a>
+                      : <Link href={link.href} className="text-background/70 text-sm hover:text-background transition-colors">{copy(link.label)}</Link>}
                   </li>
                 ))}
               </ul>
-            </div>
+            </nav>
           ))}
         </div>
-
-        {/* Bottom Bar */}
         <div className="border-t border-background/10 pt-8 text-center">
-          <p className="text-background/60 text-sm">
-            {copy("© 2024 QRConnect. All rights reserved.")}</p>
+          <p className="text-background/70 text-sm">{copy('© 2026 QRConnect. All rights reserved.')}</p>
         </div>
       </div>
     </footer>
