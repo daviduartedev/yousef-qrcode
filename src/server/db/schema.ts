@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { customType, pgSchema, uuid, text, timestamp, boolean, index, integer, varchar, jsonb, unique, uniqueIndex, primaryKey, foreignKey } from 'drizzle-orm/pg-core';
+import { customType, doublePrecision, pgSchema, uuid, text, timestamp, boolean, index, integer, varchar, jsonb, unique, uniqueIndex, primaryKey, foreignKey } from 'drizzle-orm/pg-core';
 import type { QRDesign } from '@/lib/qr-design';
 import type { QRContent } from '@/lib/qr-content';
 import type { LinkedContent } from '@/lib/qr-linked';
@@ -78,6 +78,10 @@ export const qrCodes = appSchema.table('qr_codes', {
   qrType: varchar('qr_type', { length: 50 }).notNull().default('website'),
   design: jsonb('design').$type<QRDesign>(),
   /** Account that created the code; null for codes created before organizations or by deleted accounts. */
+  /** Password hash, schedule, fallback and location consent; see src/lib/qr-rules.ts. */
+  rules: jsonb('rules'),
+  /** Verified custom domain printed in the code, e.g. `qr.example.com`; null uses the app address. */
+  trackingHost: varchar('tracking_host', { length: 253 }),
   createdBy: uuid('created_by').references(() => user.id, { onDelete: 'set null' }),
   content: jsonb('content').$type<QRContent | LinkedContent>(),
   trackingEnabled: boolean('tracking_enabled').notNull().default(true),
@@ -121,6 +125,9 @@ export const qrScans = appSchema.table('qr_scans', {
   qrCodeId: uuid('qr_code_id').notNull().references(() => qrCodes.id, { onDelete: 'cascade' }),
   scannedAt: timestamp('scanned_at', { withTimezone: true }).notNull().defaultNow(),
   ipAddress: varchar('ip_address', { length: 45 }),
+  /** Shared only with the visitor's consent, rounded to about 1 km. */
+  latitude: doublePrecision('latitude'),
+  longitude: doublePrecision('longitude'),
   userAgent: text('user_agent'),
   deviceType: varchar('device_type', { length: 50 }),
   os: varchar('os', { length: 50 }),
@@ -353,3 +360,38 @@ export const qrTemplates = appSchema.table('qr_templates', {
   createdBy: uuid('created_by').references(() => user.id, { onDelete: 'set null' }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 }, table => [index('qr_templates_user_created_idx').on(table.userId, table.createdAt)]).enableRLS();
+
+/** Domains a workspace may use for short links; usable only after the DNS TXT record proves ownership. */
+export const customDomains = appSchema.table('custom_domains', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+  hostname: varchar('hostname', { length: 253 }).notNull(),
+  /** Set once a QR code uses the domain; such a domain can no longer be removed because codes may be printed. */
+  everUsed: boolean('ever_used').default(false).notNull(),
+  verificationToken: varchar('verification_token', { length: 64 }).notNull(),
+  verifiedAt: timestamp('verified_at', { withTimezone: true }),
+  lastCheckedAt: timestamp('last_checked_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, table => [
+  unique('custom_domains_user_id_unique').on(table.userId, table.id),
+  unique('custom_domains_user_hostname_unique').on(table.userId, table.hostname),
+  // Only a verified domain is exclusive, so a pending claim cannot block the real owner.
+  uniqueIndex('custom_domains_verified_hostname_unique').on(table.hostname).where(sql`verified_at is not null`),
+]).enableRLS();
+
+/** Extra short codes of a QR. Every alias keeps working forever and is never given to another code. */
+export const qrAliases = appSchema.table('qr_aliases', {
+  alias: varchar('alias', { length: 32 }).primaryKey(),
+  /** Null once the QR code is deleted: the alias stays reserved and answers 410, never reused. */
+  qrCodeId: uuid('qr_code_id').references(() => qrCodes.id, { onDelete: 'set null' }),
+  userId: uuid('user_id').references(() => workspaces.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, table => [index('qr_aliases_code_idx').on(table.qrCodeId)]).enableRLS();
+
+/** Failed password attempts on protected QR codes, used to slow down guessing. */
+export const qrUnlockFailures = appSchema.table('qr_unlock_failures', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  qrCodeId: uuid('qr_code_id').notNull().references(() => qrCodes.id, { onDelete: 'cascade' }),
+  ipAddress: varchar('ip_address', { length: 64 }),
+  occurredAt: timestamp('occurred_at', { withTimezone: true }).defaultNow().notNull(),
+}, table => [index('qr_unlock_failures_code_time_idx').on(table.qrCodeId, table.occurredAt)]).enableRLS();

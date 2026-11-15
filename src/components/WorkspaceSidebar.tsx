@@ -1,6 +1,6 @@
 'use client';
 
-import { BarChart3, Building2, ChevronDown, CircleHelp, ClipboardList, Contact, Images, LayoutDashboard, Link2, PanelLeftClose, PanelLeftOpen, Plus, QrCode } from 'lucide-react';
+import { BarChart3, Building2, ChevronDown, Globe2, CircleHelp, ClipboardList, Contact, Images, LayoutDashboard, Link2, PanelLeftClose, PanelLeftOpen, Plus, QrCode } from 'lucide-react';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { useId, useState, type MouseEvent } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -88,8 +88,10 @@ export function WorkspaceNavigation({ id, collapsed = false, onFollow }: {
       row + iconOnly + (pathname.startsWith('/forms') ? ' bg-background' : ''))}
     {item('/assets', 'Asset library', Images, pathname === '/assets',
       row + iconOnly + (pathname === '/assets' ? ' bg-background' : ''))}
-    {item('/settings/organization', 'Organization', Building2, pathname.startsWith('/settings'),
-      row + iconOnly + (pathname.startsWith('/settings') ? ' bg-background' : ''))}
+    {item('/settings/organization', 'Organization', Building2, pathname === '/settings/organization',
+      row + iconOnly + (pathname === '/settings/organization' ? ' bg-background' : ''))}
+    {item('/settings/domains', 'Domains', Globe2, pathname === '/settings/domains',
+      row + iconOnly + (pathname === '/settings/domains' ? ' bg-background' : ''))}
     {item('/app#how-to-create', 'QR Code guide', CircleHelp, false, row + iconOnly + ' mt-2')}
   </nav>;
 }

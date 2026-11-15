@@ -15,6 +15,7 @@ import { useTranslation } from "react-i18next";
 import { useToast } from "@/hooks/use-toast";
 import { LinkedItemPicker } from "./qr-wizard/LinkedItemPicker";
 import { SavedTemplates } from "./qr/SavedTemplates";
+import { QRAdvancedPanel } from "./qr/QRAdvancedPanel";
 import { isLinkedQRType, linkedLabels } from "@/lib/qr-linked";
 import {
   saveNewQRCode,
@@ -207,7 +208,7 @@ const QRGenerator = () => {
       : qrType === "website" && Boolean(destination);
   const qrValue = record
     ? record.tracking_enabled
-      ? getTrackingUrl(record.short_code)
+      ? getTrackingUrl(record.short_code, record.tracking_host)
       : record.destination_url
     : staticType
       ? contentCheck?.ok
@@ -695,7 +696,7 @@ const QRGenerator = () => {
               {record.tracking_enabled && (
                 <>
                   <dt className="text-muted-foreground">{creation("Tracking URL")}</dt>
-                  <dd><bdi dir="ltr" className="break-all font-mono text-xs">{getTrackingUrl(record.short_code)}</bdi></dd>
+                  <dd><bdi dir="ltr" className="break-all font-mono text-xs">{getTrackingUrl(record.short_code, record.tracking_host)}</bdi></dd>
                 </>
               )}
             </dl>
@@ -759,6 +760,7 @@ const QRGenerator = () => {
                     </span>
                   </p>
                 )}
+                {record.tracking_enabled && <QRAdvancedPanel record={record} onChanged={change => setRecord(previous => previous && { ...previous, ...change })} />}
               </div>
             ) : (
               <div className="flex flex-wrap items-center justify-between gap-2">

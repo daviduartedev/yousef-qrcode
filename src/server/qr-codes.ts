@@ -11,6 +11,8 @@ import { qrDesignSchema, hasVisibleContrast } from "@/lib/qr-design";
 import { ownsImageAsset } from "@/server/assets";
 import { linkedDestination } from "@/server/qr-linked";
 import { isLinkedQRType, linkedInputSchema } from "@/lib/qr-linked";
+import { trackingUrlFor } from "@/lib/qr-rules";
+import { rulesView } from "@/server/qr-rules";
 import { qrFilterDate, qrPageSize, type QRFilterRule, type QRListQuery } from "@/lib/qr-list";
 import { safeDestination } from "@/lib/qr-destination";
 import { lifecycleExpression } from "@/server/lifecycle";
@@ -59,6 +61,8 @@ export function qrRecord(row: typeof qrCodes.$inferSelect): QRCodeRecord {
     folder_id: row.folderId,
     watched: row.watched,
     created_by: row.createdBy,
+    tracking_host: row.trackingHost,
+    rules: rulesView(row.rules),
   };
 }
 
@@ -234,7 +238,7 @@ function codeResponse(row: typeof qrCodes.$inferSelect) {
   return {
     qrCode: qrRecord(row),
     trackingUrl: row.trackingEnabled
-      ? `${getServerEnv().appUrl}/qr?code=${encodeURIComponent(row.shortCode)}`
+      ? trackingUrlFor(getServerEnv().appUrl, { short_code: row.shortCode, tracking_host: row.trackingHost })
       : null,
   };
 }
@@ -337,7 +341,9 @@ export async function lookupCode(userId: string, data: string) {
   let shortCode: string | null = null;
   try {
     const url = new URL(value);
-    if (url.origin === getServerEnv().appUrl && url.pathname === '/qr') shortCode = url.searchParams.get('code');
+    // /qr?code=…, /r/<code> on the app address, or /r/<code> on a custom domain printed in this workspace's codes.
+    if (url.pathname === '/qr' && url.origin === getServerEnv().appUrl) shortCode = url.searchParams.get('code');
+    else if (/^\/r\/[A-Za-z0-9_-]{1,32}$/.test(url.pathname)) shortCode = url.pathname.slice(3);
   } catch { /* not a URL: static content */ }
   const condition = shortCode && /^[A-Za-z0-9_-]{1,20}$/.test(shortCode) ? eq(qrCodes.shortCode, shortCode) : eq(qrCodes.destinationUrl, value);
   const [row] = await getDb().select({ id: qrCodes.id, title: qrCodes.title }).from(qrCodes)

@@ -92,6 +92,13 @@
       "when": 1794766337761,
       "tag": "0012_qr_types_and_templates",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1794768912186,
+      "tag": "0013_domains_and_rules",
+      "breakpoints": true
     }
   ]
 }
