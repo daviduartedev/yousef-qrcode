@@ -1331,3 +1331,105 @@ test("embedded or cross-site requests do not count as linkpage views or clicks",
   const tooBig = await request(`/api/linkpages/${page.id}`, { method: "PATCH", cookie: owner, body: { title: "x".repeat(70 * 1024) } });
   assert.equal(tooBig.status, 413);
 });
+
+async function newCard(cookie, firstName = "Sara") {
+  const response = await request("/api/cards", { method: "POST", cookie, body: { template: "classic", creation_key: randomUUID(), first_name: firstName } });
+  assert.equal(response.status, 201);
+  return (await response.json()).card;
+}
+const cardDraft = (card, extra = {}) => ({
+  ...card.draft,
+  person: { ...card.draft.person, firstName: "سارة", lastName: "Haddad", title: "Sales", company: "Example Co." },
+  contact: { phones: [{ label: "mobile", number: "+966 50 000 0000" }], emails: [{ label: "work", address: "sara@example.com" }], website: "https://example.com/", address: "Riyadh" },
+  links: [{ network: "linkedin", url: "https://linkedin.com/in/sara" }],
+  exchange: { enabled: true, purpose: "I will send you our catalogue." },
+  ...extra,
+});
+
+test("cards publish a public profile with vCard, counted actions and private drafts", async () => {
+  const owner = await register();
+  const other = await register();
+  const key = randomUUID();
+  const created = await request("/api/cards", { method: "POST", cookie: owner, body: { template: "ocean", creation_key: key, first_name: "Sara" } });
+  const repeated = await request("/api/cards", { method: "POST", cookie: owner, body: { template: "ocean", creation_key: key, first_name: "Sara" } });
+  assert.equal(created.status, 201);
+  assert.equal(repeated.status, 200);
+  const card = (await created.json()).card;
+  assert.equal((await repeated.json()).card.id, card.id);
+  assert.equal((await request(`/api/cards/${card.id}`, { method: "PATCH", cookie: owner, body: { draft: { ...cardDraft(card), contact: { ...cardDraft(card).contact, website: "javascript:x" } } } })).status, 400);
+  assert.equal((await request(`/api/cards/${card.id}`, { method: "PATCH", cookie: owner, body: { draft: cardDraft(card) } })).status, 200);
+  assert.equal((await request(`/c/${card.slug}`)).status, 404, "draft stays private");
+  for (const [method, path, body] of [["GET", ""], ["PATCH", "", { title: "x" }], ["DELETE", ""], ["POST", "/publish", { publish: true }], ["POST", "/qr"], ["GET", "/analytics"]]) {
+    assert.equal((await request(`/api/cards/${card.id}${path}`, { method, cookie: other, body })).status, 404, `${method} ${path}`);
+  }
+  assert.equal((await request(`/api/cards/${card.id}/publish`, { method: "POST", cookie: owner, body: { publish: true } })).status, 200);
+  const html = await (await request(`/c/${card.slug}`)).text();
+  assert.match(html, /سارة/);
+  assert.match(html, /Save contact/);
+
+  const browser = { origin: base, "user-agent": "Mozilla/5.0 (Linux; Android 14) Mobile Chrome/131" };
+  assert.equal((await request(`/c/${card.slug}/view`, { method: "POST", headers: browser })).status, 204);
+  const vcard = await request(`/c/${card.slug}/vcard`, { headers: browser });
+  assert.equal(vcard.status, 200);
+  assert.match(vcard.headers.get("content-type"), /^text\/vcard; charset=utf-8/);
+  assert.match(vcard.headers.get("content-disposition"), /attachment; filename=".+\.vcf"/);
+  const vcardText = await vcard.text();
+  assert.ok(vcardText.replace(/\r\n /g, "").includes("FN;CHARSET=UTF-8:سارة Haddad"));
+  assert.ok(vcardText.includes(`URL;TYPE=CARD:${base}/c/${card.slug}`));
+  const call = await request(`/c/${card.slug}/go/phone-0`, { headers: browser });
+  assert.equal(call.status, 302);
+  assert.equal(call.headers.get("location"), "tel:+966500000000");
+  assert.equal((await request(`/c/${card.slug}/go/address`, { headers: browser })).headers.get("location"), "https://www.google.com/maps/search/?api=1&query=Riyadh");
+  assert.equal((await request(`/c/${card.slug}/go/phone-9`, { headers: browser })).status, 404);
+  await request(`/c/${card.slug}/vcard`, { headers: { "user-agent": "WhatsApp/2.23" } });
+
+  const today = new Date().toISOString().slice(0, 10);
+  const data = await (await request(`/api/cards/${card.id}/analytics?from=${today}&to=${today}`, { cookie: owner })).json();
+  assert.deepEqual([data.summary.views, data.summary.saves, data.summary.actions], [1, 1, 2]);
+  assert.deepEqual(data.actions.map((item) => [item.target, item.total]).sort(), [["address", 1], ["phone-0", 1]]);
+  const csv = await (await request(`/api/cards/${card.id}/analytics/export?from=${today}&to=${today}`, { cookie: owner })).text();
+  assert.ok(csv.includes(`${today},1,1,2,0`));
+
+  const later = cardDraft(card, { person: { ...cardDraft(card).person, title: "Director" } });
+  await request(`/api/cards/${card.id}`, { method: "PATCH", cookie: owner, body: { draft: later } });
+  assert.doesNotMatch(await (await request(`/c/${card.slug}`)).text(), /Director/);
+  await request(`/api/cards/${card.id}/publish`, { method: "POST", cookie: owner, body: { publish: true } });
+  assert.match(await (await request(`/c/${card.slug}`)).text(), /Director/, "same address shows the new version");
+  const qr = await (await request(`/api/cards/${card.id}/qr`, { method: "POST", cookie: owner })).json();
+  const code = (await (await request(`/api/qr-codes/${qr.qr_code_id}`, { cookie: owner })).json()).qrCode;
+  assert.equal(code.destination_url, `${base}/c/${card.slug}`);
+  const removed = await (await request(`/api/cards/${card.id}`, { method: "DELETE", cookie: owner })).json();
+  assert.equal(removed.qr_code_deactivated, true);
+  assert.equal((await request(`/c/${card.slug}`)).status, 404);
+});
+
+test("contact exchange stores consent, rejects abuse and stays private to the card owner", async () => {
+  const owner = await register();
+  const other = await register();
+  const card = await newCard(owner);
+  await request(`/api/cards/${card.id}`, { method: "PATCH", cookie: owner, body: { draft: cardDraft(card) } });
+  await request(`/api/cards/${card.id}/publish`, { method: "POST", cookie: owner, body: { publish: true } });
+  const send = (body, headers = {}) => request(`/c/${card.slug}/contact`, { method: "POST", body, headers: { origin: base, "content-type": "application/json", ...headers } });
+  assert.equal((await send({ name: "Ana", email: "ana@example.com", consent: false })).status, 400);
+  assert.equal((await send({ name: "Ana", consent: true })).status, 400, "needs a way to reply");
+  assert.equal((await fetch(new URL(`/c/${card.slug}/contact`, base), { method: "POST", headers: { origin: "https://evil.example", "content-type": "application/json" }, body: JSON.stringify({ name: "x", email: "x@example.com", consent: true }) })).status, 403);
+  assert.equal((await send({ name: "Bot", email: "bot@example.com", consent: true, website: "spam" })).status, 201, "honeypot looks accepted");
+  const formula = "=HYPERLINK(\"https://evil.example\")";
+  assert.equal((await send({ name: formula, email: "ana@example.com", phone: "", company: "Acme", message: "Olá", consent: true })).status, 201);
+  const list = await (await request("/api/cards/contacts", { cookie: owner })).json();
+  assert.equal(list.contacts.length, 1, "honeypot submission was not stored");
+  assert.equal(list.contacts[0].consent_text, "I will send you our catalogue.");
+  assert.equal(list.contacts[0].card_id, card.id);
+  assert.equal((await (await request("/api/cards/contacts", { cookie: other })).json()).contacts.length, 0);
+  assert.equal((await request(`/api/cards/contacts/${list.contacts[0].id}`, { method: "DELETE", cookie: other })).status, 404);
+  const csv = await (await request("/api/cards/contacts?format=csv", { cookie: owner })).text();
+  assert.ok(csv.includes("'=HYPERLINK"));
+  assert.equal((await (await request("/api/cards/contacts?q=acme", { cookie: owner })).json()).contacts.length, 1);
+  for (let index = 0; index < 20; index++) await send({ name: `Flood ${index}`, email: `f${index}@example.com`, consent: true });
+  assert.equal((await send({ name: "Too many", email: "late@example.com", consent: true })).status, 429);
+  assert.equal((await request(`/api/cards/contacts/${list.contacts[0].id}`, { method: "DELETE", cookie: owner })).status, 200);
+  const disabled = cardDraft(card, { exchange: { enabled: false, purpose: "" } });
+  await request(`/api/cards/${card.id}`, { method: "PATCH", cookie: owner, body: { draft: disabled } });
+  await request(`/api/cards/${card.id}/publish`, { method: "POST", cookie: owner, body: { publish: true } });
+  assert.equal((await send({ name: "Ana", email: "ana@example.com", consent: true })).status, 404);
+});

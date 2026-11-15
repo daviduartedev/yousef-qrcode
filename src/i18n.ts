@@ -17,6 +17,8 @@ import enAssets from './locales/assets.en.json';
 import arAssets from './locales/assets.ar.json';
 import enLinkpages from './locales/linkpages.en.json';
 import arLinkpages from './locales/linkpages.ar.json';
+import enCards from './locales/cards.en.json';
+import arCards from './locales/cards.ar.json';
 
 i18n
   .use(initReactI18next)
@@ -31,6 +33,7 @@ i18n
         entry: enEntry,
         assets: enAssets,
         linkpages: enLinkpages,
+        cards: enCards,
       },
       ar: {
         translation: arTranslations,
@@ -41,6 +44,7 @@ i18n
         entry: arEntry,
         assets: arAssets,
         linkpages: arLinkpages,
+        cards: arCards,
       },
     },
     lng: 'en',

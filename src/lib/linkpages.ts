@@ -7,7 +7,7 @@ const plain = (max: number) => z.string().max(max).refine(value => !/[\u0000-\u0
 const color = z.string().regex(/^#[0-9a-fA-F]{6}$/);
 const blockId = z.string().regex(/^[a-z0-9]{8,24}$/);
 
-export const httpUrl = z.string().trim().max(2048).refine(value => {
+export const httpUrl = z.string().trim().max(2048).refine(value => !/[\r\n\t]/.test(value), 'Enter a valid HTTP/HTTPS URL').refine(value => {
   try {
     const url = new URL(value);
     return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password && Boolean(url.hostname);
