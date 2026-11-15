@@ -8,6 +8,8 @@ import { HttpError } from '@/server/http';
 import { getServerEnv } from '@/server/env';
 import { createCode } from '@/server/qr-codes';
 import { visitorFrom } from '@/server/visitor';
+import { after } from 'next/server';
+import { emitAndDeliver } from '@/server/webhooks';
 import { claimSlug, slugFree } from '@/server/public-slugs';
 import { deactivateLinkedCodes } from '@/server/qr-linked-cleanup';
 import { csvCell, duplicateWindowSeconds } from '@/lib/qr-analytics';
@@ -208,7 +210,7 @@ export async function submitForm(request: Request, slug: string, input: unknown)
   if (Object.keys(errors).length) throw new FormValidationError(errors);
   // Checked after the answers so people see field errors first.
   if (!validFormToken(form.id, body.data.form_token)) throw new HttpError(400, 'Reload the page and send again');
-  return getDb().transaction(async tx => {
+  const result = await getDb().transaction(async tx => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${'form-responses:' + form.id}))`);
     const { rows } = await tx.execute<{ minute: number; hour: number; day: number; total: number; same: number }>(sql`select
         count(*) filter (where created_at >= now() - interval '1 minute')::int as minute,
@@ -228,6 +230,9 @@ export async function submitForm(request: Request, slug: string, input: unknown)
     await tx.insert(formEvents).values({ formId: form.id, kind: 'submit', deviceType: visitor.deviceType, ipAddress: visitor.ipAddress, userAgent: visitor.userAgent });
     return { accepted: true };
   });
+  after(() => emitAndDeliver(form.userId, 'form.submitted', { form_id: form.id, title: form.content.title, submitted_at: new Date().toISOString(),
+    answers: form.content.fields.map(field => ({ id: field.id, label: field.label, value: answers[field.id] ?? null })) }));
+  return result;
 }
 
 export async function listFormResponses(userId: string, formId: string, page = 1) {

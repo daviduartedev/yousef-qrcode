@@ -8,6 +8,8 @@ import { HttpError } from '@/server/http';
 import { getServerEnv } from '@/server/env';
 import { createCode } from '@/server/qr-codes';
 import { visitorFrom } from '@/server/visitor';
+import { after } from 'next/server';
+import { emitAndDeliver } from '@/server/webhooks';
 import { claimSlug, slugFree } from '@/server/public-slugs';
 import { deactivateLinkedCodes } from '@/server/qr-linked-cleanup';
 import { csvCell, duplicateWindowSeconds } from '@/lib/qr-analytics';
@@ -246,7 +248,7 @@ export async function submitCardContact(request: Request, slug: string, input: u
   }
   if (parsed.data.website) return { accepted: true };
   const visitor = visitorFrom(request);
-  return getDb().transaction(async tx => {
+  const result = await getDb().transaction(async tx => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${'card-contacts:' + card.id}))`);
     const { rows } = await tx.execute<{ minute: number; hour: number; day: number; total: number; same: number }>(sql`select
         count(*) filter (where created_at >= now() - interval '1 minute')::int as minute,
@@ -267,6 +269,9 @@ export async function submitCardContact(request: Request, slug: string, input: u
       browser: visitor.browser, country: visitor.country, ipAddress: visitor.ipAddress, userAgent: visitor.userAgent });
     return { accepted: true };
   });
+  after(() => emitAndDeliver(card.userId, 'card.contact', { card_id: card.id, received_at: new Date().toISOString(), name: parsed.data.name,
+    email: parsed.data.email || null, phone: parsed.data.phone || null, company: parsed.data.company || null, message: parsed.data.message || null }));
+  return result;
 }
 
 export async function listCardContacts(userId: string, query: { card: string | null; q: string }, limit = 500) {

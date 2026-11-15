@@ -25,6 +25,8 @@ import enOrganizations from './locales/organizations.en.json';
 import arOrganizations from './locales/organizations.ar.json';
 import enAdvanced from './locales/advanced.en.json';
 import arAdvanced from './locales/advanced.ar.json';
+import enDevelopers from './locales/developers.en.json';
+import arDevelopers from './locales/developers.ar.json';
 
 i18n
   .use(initReactI18next)
@@ -43,6 +45,7 @@ i18n
         forms: enForms,
         organizations: enOrganizations,
         advanced: enAdvanced,
+        developers: enDevelopers,
       },
       ar: {
         translation: arTranslations,
@@ -57,6 +60,7 @@ i18n
         forms: arForms,
         organizations: arOrganizations,
         advanced: arAdvanced,
+        developers: arDevelopers,
       },
     },
     lng: 'en',

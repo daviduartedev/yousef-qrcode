@@ -395,3 +395,50 @@ export const qrUnlockFailures = appSchema.table('qr_unlock_failures', {
   ipAddress: varchar('ip_address', { length: 64 }),
   occurredAt: timestamp('occurred_at', { withTimezone: true }).defaultNow().notNull(),
 }, table => [index('qr_unlock_failures_code_time_idx').on(table.qrCodeId, table.occurredAt)]).enableRLS();
+
+/** Keys for the public API. Only a SHA-256 hash is stored; the key is shown once when created. */
+export const apiKeys = appSchema.table('api_keys', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+  name: varchar('name', { length: 60 }).notNull(),
+  prefix: varchar('prefix', { length: 12 }).notNull().unique(),
+  keyHash: varchar('key_hash', { length: 64 }).notNull(),
+  scopes: jsonb('scopes').$type<string[]>().notNull(),
+  createdBy: uuid('created_by').references(() => user.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
+  revokedAt: timestamp('revoked_at', { withTimezone: true }),
+}, table => [index('api_keys_user_idx').on(table.userId)]).enableRLS();
+
+/** Fixed one-minute windows per key for the request quota. */
+export const apiKeyUsage = appSchema.table('api_key_usage', {
+  keyId: uuid('key_id').notNull().references(() => apiKeys.id, { onDelete: 'cascade' }),
+  windowStart: timestamp('window_start', { withTimezone: true }).notNull(),
+  requests: integer('requests').notNull(),
+}, table => [primaryKey({ columns: [table.keyId, table.windowStart] })]).enableRLS();
+
+/** Outgoing webhooks. The signing secret is encrypted with the server secret (AES-256-GCM). */
+export const webhooks = appSchema.table('webhooks', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+  url: varchar('url', { length: 2048 }).notNull(),
+  events: jsonb('events').$type<string[]>().notNull(),
+  secretEncrypted: varchar('secret_encrypted', { length: 200 }).notNull(),
+  active: boolean('active').default(true).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, table => [index('webhooks_user_idx').on(table.userId)]).enableRLS();
+
+export const webhookDeliveries = appSchema.table('webhook_deliveries', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  webhookId: uuid('webhook_id').notNull().references(() => webhooks.id, { onDelete: 'cascade' }),
+  eventId: uuid('event_id').notNull(),
+  event: varchar('event', { length: 40 }).notNull(),
+  payload: jsonb('payload').notNull(),
+  status: varchar('status', { length: 16 }).notNull(),
+  attempts: integer('attempts').default(0).notNull(),
+  nextAttemptAt: timestamp('next_attempt_at', { withTimezone: true }),
+  lastStatusCode: integer('last_status_code'),
+  lastError: varchar('last_error', { length: 200 }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  deliveredAt: timestamp('delivered_at', { withTimezone: true }),
+}, table => [index('webhook_deliveries_hook_created_idx').on(table.webhookId, table.createdAt), index('webhook_deliveries_due_idx').on(table.status, table.nextAttemptAt)]).enableRLS();
