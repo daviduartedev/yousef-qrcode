@@ -9,6 +9,7 @@ import { getServerEnv } from '@/server/env';
 import { createCode } from '@/server/qr-codes';
 import { visitorFrom } from '@/server/visitor';
 import { claimSlug, slugFree } from '@/server/public-slugs';
+import { deactivateLinkedCodes } from '@/server/qr-linked-cleanup';
 import { csvCell, duplicateWindowSeconds } from '@/lib/qr-analytics';
 import { slugify, themePreset, validSlug } from '@/lib/linkpages';
 import {
@@ -138,6 +139,7 @@ export async function deleteCard(userId: string, cardId: string) {
   return getDb().transaction(async tx => {
     const [row] = await tx.delete(cards).where(and(eq(cards.userId, userId), eq(cards.id, cardId))).returning({ id: cards.id, qrCodeId: cards.qrCodeId });
     if (!row) throw new HttpError(404, 'Card not found');
+    await deactivateLinkedCodes(tx, userId, 'card', row.id);
     if (row.qrCodeId) await tx.update(qrCodes).set({ isActive: false, updatedAt: new Date() }).where(and(eq(qrCodes.userId, userId), eq(qrCodes.id, row.qrCodeId)));
     return { deleted: true, qr_code_deactivated: Boolean(row.qrCodeId) };
   });

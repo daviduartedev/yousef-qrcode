@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { getDb } from '@/server/db';
 import { assetFolders, assets } from '@/server/db/schema';
 import { HttpError } from '@/server/http';
+import { deactivateLinkedCodes } from '@/server/qr-linked-cleanup';
 import {
   assetKinds, assetLimits, assetMimeTypes, cleanAssetName, imageDimensions, sniffAssetType,
   type AssetFolder, type AssetPage, type AssetRecord, type AssetUsage,
@@ -151,9 +152,10 @@ export async function deleteAsset(userId: string, assetId: string) {
   return getDb().transaction(async tx => {
     const [row] = await tx.delete(assets).where(and(eq(assets.userId, userId), eq(assets.id, assetId))).returning({ id: assets.id });
     if (!row) throw new HttpError(404, 'File not found');
+    const linked = await deactivateLinkedCodes(tx, userId, 'file', assetId);
     const cleared = await tx.execute(sql`update qrconnect.qr_codes set design = design - 'logoAssetId', updated_at = now()
       where user_id = ${userId} and design->>'logoAssetId' = ${assetId}`);
-    return { deleted: true, qr_codes_updated: cleared.rowCount ?? 0 };
+    return { deleted: true, qr_codes_updated: cleared.rowCount ?? 0, qr_codes_deactivated: linked };
   });
 }
 

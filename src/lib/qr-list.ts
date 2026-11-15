@@ -33,9 +33,10 @@ export type QRListQuery = {
   watch: '' | 'yes' | 'no';
   focus: string;
   lifecycle: '' | LifecycleState;
+  creator: '' | 'me';
 };
 
-export const qrListKeys = ['page', 'q', 'mode', 'status', 'view', 'sort', 'rules', 'folder', 'label', 'watch', 'focus', 'lifecycle'];
+export const qrListKeys = ['page', 'q', 'mode', 'status', 'view', 'sort', 'rules', 'folder', 'label', 'watch', 'focus', 'lifecycle', 'creator'];
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const idParam = (value: string | null) => value && uuidPattern.test(value) ? value.toLowerCase() : '';
 export const normalizeQRDigits = (value: string) => value.replace(/[٠-٩۰-۹]/g, digit =>
@@ -94,6 +95,7 @@ export function readQRListQuery(params: Pick<URLSearchParams, 'get'>): QRListQue
     watch: watch === 'yes' || watch === 'no' ? watch : '',
     focus,
     lifecycle: (lifecycleStates as readonly string[]).includes(lifecycle ?? '') ? lifecycle as LifecycleState : '',
+    creator: params.get('creator') === 'me' ? 'me' : '',
   };
 }
 
@@ -118,6 +120,7 @@ export function qrListHref(query: QRListQuery) {
   if (query.watch) params.set('watch', query.watch);
   if (query.focus) params.set('focus', query.focus);
   if (query.lifecycle) params.set('lifecycle', query.lifecycle);
+  if (query.creator) params.set('creator', query.creator);
   if (query.page > 1) params.set('page', String(query.page));
   const search = params.toString();
   return search ? `/my-qrcodes?${search}` : '/my-qrcodes';

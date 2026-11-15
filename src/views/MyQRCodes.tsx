@@ -48,6 +48,7 @@ import {
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { useToast } from "@/hooks/use-toast";
 import { workspaceHeaders } from "@/lib/workspace-client";
+import { FindByImage } from "@/components/qr/FindByImage";
 
 // Chart colors
 const CHART_COLORS = {
@@ -362,6 +363,13 @@ const MyQRCodes = ({ query, result, origin, organization }: {
 
         <QRCollections query={query} organization={organization} onChanged={refresh} />
         <QRListFilters key={qrListHref({ ...query, page: 1 })} query={query} {...organization} />
+        <div className="flex flex-wrap items-center gap-2">
+          <FindByImage />
+          <Link href={qrListHref({ ...query, creator: query.creator ? '' : 'me', page: 1 })} aria-pressed={query.creator === 'me'}
+            className={`inline-flex min-h-11 items-center rounded-md border px-3 text-sm ${query.creator === 'me' ? 'border-primary bg-primary/10 font-medium' : 'hover:bg-muted'}`}>
+            {copy('Created by me')}
+          </Link>
+        </div>
         <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
           <p aria-live="polite" className="text-muted-foreground">
             {copy("QR Codes found: {{total}}", { total: new Intl.NumberFormat(i18n.resolvedLanguage).format(total) })}

@@ -9,6 +9,8 @@ import { HttpError } from "@/server/http";
 import type { QRCodeRecord } from "@/lib/qr-types";
 import { qrDesignSchema, hasVisibleContrast } from "@/lib/qr-design";
 import { ownsImageAsset } from "@/server/assets";
+import { linkedDestination } from "@/server/qr-linked";
+import { isLinkedQRType, linkedInputSchema } from "@/lib/qr-linked";
 import { qrFilterDate, qrPageSize, type QRFilterRule, type QRListQuery } from "@/lib/qr-list";
 import { safeDestination } from "@/lib/qr-destination";
 import { lifecycleExpression } from "@/server/lifecycle";
@@ -29,6 +31,8 @@ const createInput = z
     qr_type: z.string().trim().min(1).max(50).default("website"),
     design: qrDesignSchema.refine(hasVisibleContrast).optional(),
     tracking_enabled: z.boolean().optional(),
+    /** A Linkpage, card, form or library file of the same workspace; the server derives the address. */
+    link: linkedInputSchema.optional(),
   })
   .strict();
 const updateInput = z.union([
@@ -54,6 +58,7 @@ export function qrRecord(row: typeof qrCodes.$inferSelect): QRCodeRecord {
     updated_at: row.updatedAt.toISOString(),
     folder_id: row.folderId,
     watched: row.watched,
+    created_by: row.createdBy,
   };
 }
 
@@ -103,7 +108,8 @@ function filterCondition({ field, op, value }: QRFilterRule) {
   return op === 'is_not' || op === 'not_contains' ? not(condition) : condition;
 }
 
-export async function listCodePage(userId: string, query: QRListQuery) {
+/** `actorId` is the signed-in account, used by the "created by me" filter inside a shared workspace. */
+export async function listCodePage(userId: string, query: QRListQuery, actorId?: string) {
   const db = getDb();
   const phrase = `%${escapeLike(query.q)}%`;
   const labelMatch = query.label ? exists(db.select({ one: sql`1` }).from(qrCodeLabels).where(and(
@@ -112,6 +118,7 @@ export async function listCodePage(userId: string, query: QRListQuery) {
   const matches = and(
     eq(qrCodes.userId, userId),
     query.focus ? eq(qrCodes.id, query.focus) : undefined,
+    query.creator === 'me' && actorId ? eq(qrCodes.createdBy, actorId) : undefined,
     query.q ? or(ilike(qrCodes.title, phrase), ilike(qrCodes.destinationUrl, phrase)) : undefined,
     query.mode || query.status ? eq(qrCodes.trackingEnabled, query.mode !== 'direct') : undefined,
     query.status ? eq(qrCodes.isActive, query.status === 'active') : undefined,
@@ -154,14 +161,14 @@ export async function listCodePage(userId: string, query: QRListQuery) {
 async function assertLogoAsset(userId: string, design: { logoAssetId?: string | null } | undefined) {
   if (design?.logoAssetId && !(await ownsImageAsset(userId, design.logoAssetId))) throw new HttpError(400, "The selected logo is not in your library");
 }
-export async function createCode(userId: string, input: unknown, options?: { recordId?: string }) {
+export async function createCode(userId: string, input: unknown, options?: { recordId?: string; createdBy?: string }) {
   const parsed = createInput.safeParse(input);
   if (!parsed.success)
     throw new HttpError(
       400,
       "Provide a valid HTTP/HTTPS destination and QR details",
     );
-  const values = resolveCreateValues(parsed.data);
+  const values = parsed.data.link ? await resolveLinkedValues(userId, parsed.data) : resolveCreateValues(parsed.data);
   await assertLogoAsset(userId, parsed.data.design);
   for (let attempt = 0; attempt < 3; attempt++) {
     const shortCode = randomBytes(9).toString("base64url");
@@ -172,6 +179,7 @@ export async function createCode(userId: string, input: unknown, options?: { rec
         userId,
         shortCode,
         ...values,
+        createdBy: options?.createdBy ?? null,
         design: parsed.data.design,
       })
       .onConflictDoNothing()
@@ -184,6 +192,15 @@ export async function createCode(userId: string, input: unknown, options?: { rec
     }
   }
   throw new HttpError(503, "Unable to allocate a QR code. Please retry");
+}
+
+/** Linked codes are always trackable and open the published address of the chosen item. */
+async function resolveLinkedValues(userId: string, data: z.infer<typeof createInput>) {
+  if (data.content !== undefined || data.destination_url !== undefined || data.tracking_enabled === false)
+    throw new HttpError(400, "Linked QR codes take only the item to open");
+  const link = data.link!;
+  const target = await linkedDestination(userId, link.kind, link.id);
+  return { destinationUrl: target.url, content: { type: link.kind, id: link.id }, qrType: link.kind, trackingEnabled: true, title: data.title || target.title };
 }
 
 function resolveCreateValues(data: z.infer<typeof createInput>) {
@@ -202,7 +219,7 @@ function resolveCreateValues(data: z.infer<typeof createInput>) {
       title: titleFrom(describeQRDestination({ qr_type: parsed.content.type, destination_url: parsed.payload, content: parsed.content })),
     };
   }
-  if (!data.destination_url || isStaticQRType(data.qr_type))
+  if (!data.destination_url || isStaticQRType(data.qr_type) || isLinkedQRType(data.qr_type))
     throw new HttpError(400, "Provide a valid HTTP/HTTPS destination and QR details");
   return {
     destinationUrl: new URL(data.destination_url).href,
@@ -267,6 +284,8 @@ async function changeDestination(userId: string, id: string, value: string) {
     if (!current) throw new HttpError(404, "QR code not found");
     if (!current.trackingEnabled)
       throw new HttpError(409, "Only trackable QR codes can change destination without a new code");
+    if (isLinkedQRType(current.qrType))
+      throw new HttpError(409, "This QR code follows its page, card, form or file; edit that item instead");
     if (current.destinationUrl === destination)
       throw new HttpError(409, "This QR code already uses that destination");
     await tx.insert(qrDestinationChanges).values({
@@ -306,4 +325,22 @@ export async function deleteCode(userId: string, id: string) {
     .returning({ id: qrCodes.id });
   if (!deleted) throw new HttpError(404, "QR code not found");
   return { deleted: true };
+}
+
+/**
+ * Finds the workspace QR that produced a decoded payload: a tracking address of this app (by short code)
+ * or the exact content of a direct or static code. Other workspaces are never searched.
+ */
+export async function lookupCode(userId: string, data: string) {
+  const value = data.trim().slice(0, 2048);
+  if (!value) return null;
+  let shortCode: string | null = null;
+  try {
+    const url = new URL(value);
+    if (url.origin === getServerEnv().appUrl && url.pathname === '/qr') shortCode = url.searchParams.get('code');
+  } catch { /* not a URL: static content */ }
+  const condition = shortCode && /^[A-Za-z0-9_-]{1,20}$/.test(shortCode) ? eq(qrCodes.shortCode, shortCode) : eq(qrCodes.destinationUrl, value);
+  const [row] = await getDb().select({ id: qrCodes.id, title: qrCodes.title }).from(qrCodes)
+    .where(and(eq(qrCodes.userId, userId), condition)).orderBy(desc(qrCodes.createdAt)).limit(1);
+  return row ?? null;
 }
