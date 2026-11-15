@@ -25,3 +25,5 @@ backups/
 exports/
 .data/
 .neon
+/.source/
+/.vercel/

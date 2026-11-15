@@ -79,3 +79,14 @@ test('Git rejects real secrets inside an environment example too', t => {
   git('add', '.env.example');
   assert.equal(check().status, 1);
 });
+
+test('Git rejects QRConnect API keys without printing them', t => {
+  const { dir, git, check } = repository(t);
+  const token = ['qrc', 'ab12'.repeat(3), '_' + 'a'.repeat(41) + '-'].join('_');
+  writeFileSync(join(dir, 'api-example.md'), `Send Authorization: Bearer ${token}`);
+  git('add', 'api-example.md');
+  const result = check();
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /qrconnect-api-key/);
+  assert.ok(!(result.stdout + result.stderr).includes(token));
+});

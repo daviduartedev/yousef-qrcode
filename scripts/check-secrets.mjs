@@ -8,6 +8,7 @@ const patterns = [
   ['credential-url', /\b(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?):\/\/[^\s:'"<>]+:([^\s@'"<>]+)@[^\s'"<>]+/g],
   ['private-key', /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/g],
   ['provider-token', /\b(?:sb_(?:secret|publishable)_[A-Za-z0-9_-]{12,}|sk[-_](?:proj[-_]|live_|test_)?[A-Za-z0-9_-]{20,}|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{30,}|(?:AKIA|ASIA)[A-Z0-9]{16}|AIza[A-Za-z0-9_-]{30,})\b/g],
+  ['qrconnect-api-key', /(?<![A-Za-z0-9_-])qrc_[a-f0-9]{12}_[A-Za-z0-9_-]{43}(?![A-Za-z0-9_-])/g],
   ['jwt-token', /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/g],
   ['secret-assignment', /\b(?:[A-Z_]*(?:PASSWORD|SECRET|PRIVATE_KEY|ACCESS_TOKEN|API_KEY))["']?\s*[:=]\s*["']?([^\s"'`,;}{]{12,})/g],
   ['private-key-file', /\bNEXT_PUBLIC_[A-Z_]*(?:DATABASE|PASSWORD|SECRET|PRIVATE_KEY|SERVICE_ROLE|ACCESS_TOKEN|API_KEY)\b/g],

@@ -8,13 +8,14 @@ import { Button } from '@/components/ui/button';
 import { LanguageToggle } from './LanguageToggle';
 import { useAuth } from '@/hooks/useAuth';
 
-/** Every public link points at a section that exists on the landing page. */
+/** Public destinations shared by the desktop and mobile navigation. */
 export const publicSections = [
   { href: '/#features', label: 'Features' },
   { href: '/#analytics', label: 'Analytics' },
   { href: '/#industries', label: 'Solutions' },
   { href: '/#pricing', label: 'Pricing' },
   { href: '/#faq', label: 'FAQ' },
+  { href: '/docs', label: 'Documentation' },
 ] as const;
 
 const LandingHeader = () => {

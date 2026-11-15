@@ -1,0 +1,29 @@
+---
+title: API, webhooks, and integrations
+description: Connect QRConnect to other applications with scoped keys, signed events, and delivery history.
+---
+
+## Public API
+
+In [API and webhooks](/settings/developers), a workspace admin can create and revoke API keys. Store a new key in your secret manager. The application only shows its value during creation. Send it as `Authorization: Bearer <KEY>`.
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /api/v1/qr-codes` | List QR codes. |
+| `POST /api/v1/qr-codes` | Create a QR code. |
+| `GET /api/v1/qr-codes/{id}` | Read a workspace QR code. |
+| `PATCH /api/v1/qr-codes/{id}` | Update supported fields. |
+| `DELETE /api/v1/qr-codes/{id}` | Delete a QR record. |
+| `GET /api/v1/analytics?from=YYYY-MM-DD&to=YYYY-MM-DD` | Read analytics for a period. |
+
+Scopes include `qr:read`, `qr:write`, and `analytics:read`. The API allows 60 requests per minute per key. Honor `Retry-After` after `429` and handle `401`, `403`, and `404` according to the credential, permission, and resource.
+
+## Signed webhooks
+
+Configure a public HTTPS endpoint and subscribe to `qr.scanned`, `form.submitted`, or `card.contact`. Verify the HMAC-SHA256 signature over the timestamp and raw request body before processing. Use `QRConnect-Event-Id` to deduplicate deliveries and reject requests outside the allowed time window. The dashboard supports test, pause, resend, and delivery history. Scheduled retries depend on hosting configuration.
+
+## Connectors
+
+[Integrations](/integrations) supports Slack, HubSpot, and GA4. Slack forwards selected events. HubSpot creates records from contacts shared with consent and leaves existing contacts intact. GA4 receives scan events. Zapier, Make, and n8n can connect through webhooks.
+
+Connectors were tested with local receivers. See [Delivery status](/docs/status) for real sandbox verification.

@@ -1,0 +1,13 @@
+{
+  "title": "Documentation",
+  "pages": [
+    "index",
+    "qr-codes",
+    "analytics",
+    "paginas-e-cartoes",
+    "espacos-e-arquivos",
+    "api-e-integracoes",
+    "arquitetura",
+    "status"
+  ]
+}

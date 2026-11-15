@@ -1908,8 +1908,10 @@ test("API keys are scoped to their workspace, revocable and rate limited", async
   const created = await request("/api/developers/keys", { method: "POST", cookie: owner, body: { name: "Reader", scopes: ["qr:read"] } });
   assert.equal(created.status, 201);
   const { key, apiKey } = await created.json();
-  assert.match(key, /^qrc_[a-z0-9]{12}_[A-Za-z0-9_-]{43}$/);
-  assert.doesNotMatch(JSON.stringify(await (await request("/api/developers/keys", { cookie: owner })).json()), new RegExp(key.split("_")[2]), "the secret is shown only once");
+  const keyParts = /^qrc_[a-f0-9]{12}_([A-Za-z0-9_-]{43})$/.exec(key);
+  assert.ok(keyParts, "the new API key has the expected format");
+  const keys = await (await request("/api/developers/keys", { cookie: owner })).json();
+  assert.ok(!JSON.stringify(keys).includes(keyParts[1]), "the secret is shown only once");
   const list = await v1("/api/v1/qr-codes", key);
   assert.equal(list.status, 200);
   assert.equal(list.headers.get("x-ratelimit-limit"), "60");

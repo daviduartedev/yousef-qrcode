@@ -1,0 +1,53 @@
+---
+title: Delivery status and comparison
+description: Review verified coverage, differences from Uniqode, and remaining work.
+---
+
+The product baseline was verified on 15 November 2026. Lots 1–17 are integrated. [Open the staging product](/auth)
+
+## Comparison with Uniqode
+
+| Area | Verified evidence | Still to verify |
+|---|---|---|
+| Navigation and QR management | The desktop sidebar, create button, and search placement were compared with archived frames. QRConnect tests cover list, grid, filters, organization, ZIP, and CSV. | Side-by-side populated lists and bulk operations in an accessible trial. |
+| Public site, creation, and analytics | The audit guided the public layout and creation flow. Downloads, destination changes, and analytics have their own functional checks. | Account recovery, final creation states, and advanced analytics views in the reference. |
+| Linkpages, cards, forms, assets, and teams | Publishing and management have browser or access-control evidence. | Direct comparison with populated screens, published content, submissions, and roles. |
+| Domains, API, and integrations | QRConnect rules and event delivery were exercised in controlled tests. | Authorized DNS/TLS, real connector sandboxes, and hosted scheduled retries. |
+
+The Uniqode trial required sign-in. The comparison used available recordings, the archived audit, and official help. QRConnect's tests verify its behavior. Visual parity remains open for screens without comparable evidence.
+
+## Lot 18 — Assisted creation
+
+The implementation under review creates unpublished Linkpage and form drafts from a description and selected workspace sources. The flow was exercised with a local fixture. Security review, integration, and testing with an authorized provider are still needed.
+
+## Lot 19 — Trial, plans, and billing
+
+This covers workspace usage, quotas, trials, plan entitlements, subscriptions, plan changes, cancellations, payment failures, and invoices. Usage for existing limits can ship separately. Checkout needs an approved catalog, downgrade and lapse rules for published resources, and a sandbox payment provider.
+
+## Lot 20 — Account, notifications, support, and events
+
+This covers account preferences, workspace notifications, help, support, and events. Preferences, internal notices, and help can move independently. External channels and event operations need agreed workflows and authorized test destinations.
+
+## Features outside the integrated release
+
+| Feature | What remains and why |
+|---|---|
+| AI assistants and chat | Lot 18 is under review. Its scope covers private drafts and human approval. Public chat, PDF and menu assistants, and automatic QR styling need separate designs for source handling, moderation, access, and usage limits. |
+| Checkout, quotas, and invoices | Lot 19 has only initial work on usage. Trial transitions, plan quotas, checkout, invoices, and payment recovery need approved commercial rules and a payment sandbox. The rules must cover what happens to printed QR codes and published pages when a plan ends. |
+| Preferences, notifications, support, and events | Lot 20 is pending. Dedicated account preferences, workspace notifications, in-app help, support, and event workflows are still to be delivered. External delivery needs agreed recipients, channels, and test destinations. |
+| QR exports, design, and record activity | Downloads currently cover PNG and SVG, and CSV import covers Website QR codes. PDF/EPS exports need rendering and scan verification. Import for other QR types needs a field and validation contract per type. The editor saves reusable QR templates and records destination changes. Comments and shared activity need separate collaboration and event rules. |
+| Linkpages and Cards | Linkpage template favorites and additional widgets are outside the current gallery and block editor. Wallet passes and bulk creation of team cards need their own publishing and administration workflows. |
+| Advanced targeting | Tracked QR codes support scheduling, password protection, and consent-based location capture. Routing by country or device needs matching rules and defined fallback behavior. |
+| Additional connectors | The integrated catalog covers Slack, HubSpot, Google Analytics 4, and webhooks. Salesforce, Google Sheets, design and GS1 tools, directories, and email signature integrations remain outside the release. Each additional connector needs a supported integration contract and a test account. OAuth providers also need a registered application. |
+| Forms | Conditional branching, visitor file uploads, and payments are outside the current question and response model. They need rules for routing, storage and file safety, or payment handling. New-response email also depends on the email provider. |
+| Enterprise identity and access | Organizations use workspace roles and invitations. Enterprise SSO, groups, permissions per module, formal ownership transfer, and organization-wide audit logs were excluded from the initial team scope. These require their own identity, authorization, and event rules. |
+
+## Integrated features awaiting hosted verification
+
+| Feature | What is needed |
+|---|---|
+| Account emails and invitations | Send verification, password recovery, and invitations through an authorized email sender and confirm delivery and link behavior. |
+| Analytics | Confirm the trusted proxy configuration for unique-scanner counts and deduplication. |
+| Custom domains | Use an authorized domain and verify DNS, HTTPS certificate issuance, and routing in the hosting project. |
+| Integrations and webhooks | Use authorized test accounts for real connector flows and verify scheduled webhook retries on the hosted environment. |
+| Production launch and recovery | The production rollout and rollback exercise are deferred. Hosted backup and restore are still open. |

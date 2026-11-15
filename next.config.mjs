@@ -1,6 +1,7 @@
-import type { NextConfig } from 'next';
+import { createMDX } from 'fumadocs-mdx/next';
 
-const nextConfig: NextConfig = {
+/** @type {import('next').NextConfig} */
+const nextConfig = {
   poweredByHeader: false,
   async headers() {
     return [{ source: '/:path*', headers: [
@@ -10,4 +11,5 @@ const nextConfig: NextConfig = {
     ] }, { source: '/auth/reset-password', headers: [{ key: 'Referrer-Policy', value: 'no-referrer' }] }];
   },
 };
-export default nextConfig;
+
+export default createMDX()(nextConfig);

@@ -5,7 +5,7 @@ import nextTs from 'eslint-config-next/typescript';
 export default defineConfig([
   ...nextVitals,
   ...nextTs,
-  globalIgnores(['.next/**', '.scratch/**', 'node_modules/**', 'next-env.d.ts', '.playwright-cli/**']),
+  globalIgnores(['.next/**', '.source/**', '.scratch/**', 'node_modules/**', 'next-env.d.ts', '.playwright-cli/**']),
   { rules: { '@next/next/no-img-element': 'off', 'react-hooks/set-state-in-effect': 'off', '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }] } },
   {
     files: ['src/components/**', 'src/views/**'],

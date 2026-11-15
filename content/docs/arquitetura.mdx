@@ -1,0 +1,31 @@
+---
+title: Technical stack and architecture
+description: The technologies, data flow, and security controls behind QRConnect.
+---
+
+## Components
+
+| Layer | Technology | Purpose |
+|---|---|---|
+| Web and HTTP | Next.js App Router, React, TypeScript | Public and authenticated pages and API routes. |
+| Interface | Tailwind CSS, Radix UI, Lucide | Responsive design, accessible controls, and icons. |
+| Languages | i18next, react-i18next | English and Arabic with RTL. |
+| Database | PostgreSQL on Neon, pg, Drizzle ORM | Relational data, transactions, and versioned migrations. |
+| Sessions | Better Auth | Registration, sign-in, and server-side session validation. |
+| Validation | Zod | Validates inputs before server operations. |
+| QR and analytics | qrcode-generator, qr-code-styling, jsQR, Recharts | Encoding, rendering, image decoding, and charts. |
+| Documentation | Fumadocs Core and MDX | Versioned content, page outlines, and search. |
+| Hosting and tests | Vercel, GitHub Actions, Docker | Staging deployment, continuous checks, and disposable test databases. |
+
+## How a request reaches the data
+
+1. The interface sends an operation to Next.js.
+2. The route validates input and identifies the session or API key. The server determines the workspace and permission.
+3. The data layer runs the operation in PostgreSQL and returns the required fields.
+4. Public reading and submission routes have separate rules. Publishing is a separate action from saving a draft.
+
+## Safety and operations
+
+Database access and provider credentials stay on the server. Private queries are scoped to the authorized workspace. The database schema uses Row Level Security as an additional safeguard. API keys are stored as hashes. Connector credentials and webhook secrets are encrypted. Webhook destinations are checked to limit access to private networks.
+
+The pipeline checks credentials, types, lint, builds, unit tests, and HTTP behavior. Browser workflows and migration tests are recorded where applicable. Staging uses Vercel and Neon. See [Delivery status](/docs/status) for outstanding production decisions.

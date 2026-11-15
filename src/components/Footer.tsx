@@ -9,6 +9,7 @@ const footerLinks = [
     { href: '/#analytics', label: 'Analytics' },
     { href: '/#integrations', label: 'Integrations' },
     { href: '/#pricing', label: 'Pricing' },
+    { href: '/docs', label: 'Documentation' },
   ] },
   { title: 'Solutions', links: [
     { href: '/#industries', label: 'Industries' },

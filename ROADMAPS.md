@@ -1,10 +1,10 @@
 # Roadmaps — QRConnect
 
-Planejamento original de 01/11/2026, com estado atualizado em 15/11/2026 (Lotes 6 e 7 incluídos). Os PRs #5 e #10 entregaram a base e o editor. Os PRs #16 e #17 integraram o preparo operacional, o Neon e a correção de build para a Vercel. O [PR #25](https://github.com/daviduartedev/yousef-qrcode/pull/25) integrou o Lote 4 validado (#19–#24). As especificações pai #1 e #6 permanecem abertas intencionalmente.
+Planejamento original de 01/11/2026. Estado conferido em 15/11/2026 com a `main` até o Lote 17. Consulte o [checkpoint atualizado](docs/agents/cloud-execution-state.md) e a [documentação do cliente](content/docs/index.mdx). As especificações pai #1 e #6 permanecem abertas intencionalmente.
 
 Os Lotes 1 e 2 tiveram validação humana local. A [homologação](https://yousef-xi.vercel.app/) recebeu aceite do proprietário em 11/11/2026 com base nos testes hospedados de cadastro, login, isolamento, logout e tracking. O proprietário dispensou a rodada manual hospedada de reabertura do design, PNG/SVG e leitura no celular.
 
-O produto usa Next.js, Better Auth e PostgreSQL. A homologação usa Vercel e Neon. O cliente ainda definirá a infraestrutura de produção. As correções do editor já foram entregues e os novos módulos da referência Uniqode continuam futuros.
+O produto usa Next.js, Better Auth e PostgreSQL. A homologação usa Vercel e Neon. As decisões de produção e a comprovação da paridade integral com a Uniqode seguem pendentes.
 
 O [roteiro de execução na nuvem](docs/agents/execucao-roadmap-cloud.md) resume a base entregue e ordena os próximos lotes por dependência, com critérios de teste e publicação em homologação.
 
@@ -30,8 +30,14 @@ R4 e R5 são independentes entre si. A ordem pode seguir a prioridade comercial.
 | R1 | Homologação Vercel + Neon aceita no #13 com evidência HTTP e dispensa da rodada manual. |
 | R2 | Editor entregue/validado; publicação e retorno operacional pendentes; ponte antiga dispensada. |
 | R3 | Painel e gestão inicial do Lote 4 (#19–#24) aceitos e integrados. O [Lote 5](docs/lotes/05-gestao-avancada/spec.md) entregou navegação e gestão avançada na `main` em `f0c6f61`. CI e deploy na Vercel passaram, com a migração `0004` verificada no Neon de homologação. O [Lote 6](docs/lotes/06-criacao-e-detalhe/spec.md) entrega o assistente de criação, os tipos estáticos independentes, o download configurável e a troca de destino com histórico (PR #26, homologação com migração `0005`). O [Lote 7](docs/lotes/07-analytics-ciclo-de-vida/spec.md) entrega o analytics consolidado e o ciclo de vida. |
-| R4–R5 | Módulos publicados/persistidos ainda não entregues; abas/editor local herdados não os substituem. |
-| R6 | Superfícies principais mapeadas no trial. Regras e fluxos restritos a planos superiores precisam de evidência própria. |
+| R4–R5 | Linkpages e Cards integrados nos Lotes 10 e 11, com editor, publicação, QR e analytics. Cards inclui vCard e troca de contato. |
+| R6 | Biblioteca, Forms, organizações, domínios e regras avançadas de QR, API, webhooks e integrações foram integrados nos Lotes 9 e 12–17. As validações com provedores reais e os Lotes 18–20 seguem nos itens abaixo. |
+
+| Lote aberto | Escopo | Situação |
+|---|---|---|
+| 18 | IA para rascunhos de Linkpages e Forms, fontes e fila de revisão | Branch com testes via provedor local. Fechamento da revisão, integração e verificação com provedor autorizado pendentes. |
+| 19 | Uso e cotas, trial, permissões comerciais, planos, assinatura e faturamento | Em andamento no escopo de uso do espaço. Catálogo, preços, políticas de mudança de plano e provedor de pagamento em sandbox pendentes. |
+| 20 | Preferências da conta, notificações, ajuda, suporte e eventos | Planejado. Preferências, notificações internas e ajuda são a primeira fatia. Canais externos e fluxos de eventos dependem de definição. |
 
 Os Lotes 4 e 5 estão em homologação na Vercel e no Neon. Ver [especificação validada do painel e da gestão](docs/referencias/r3-painel-e-gestao.md). A primeira publicação em produção e o ensaio de retorno do [#15](https://github.com/daviduartedev/yousef-qrcode/issues/15) ficam adiados. O [#12](https://github.com/daviduartedev/yousef-qrcode/issues/12) permanece aberto. Antes de publicar em produção, confirmar ambiente, operador, origem HTTPS, retorno, observação e critérios para liberar, além de decidir como tratar a recuperação adiada. Ver [acessos e decisões](docs/lotes/03-transicao-operacional/acessos-e-decisoes.md).
 
@@ -121,7 +127,7 @@ A busca por imagem de QR, os filtros por ciclo de vida e proprietário e os atal
 - [x] Documentar o procedimento de retorno compatível com design/tracking e gravações posteriores à troca.
 - [ ] Ensaiar e comprovar esse retorno no ambiente operacional, sem perder gravações novas.
 
-**Estado da entrega:** editor validado localmente e base em homologação. A paridade do site público e da entrada segue na fila. A publicação em produção e o ensaio de retorno seguem no #15.
+**Estado da entrega:** editor validado localmente e base em homologação. O Lote 8 integrou a revisão da entrada e do site público. A comparação de recuperação, verificação de e-mail e SSO da Uniqode ficou pendente, assim como a validação hospedada do provedor de envio. A publicação em produção e o ensaio de retorno seguem no #15.
 
 ## R3 — Gestão de QR Codes e analytics
 
@@ -129,15 +135,16 @@ A busca por imagem de QR, os filtros por ciclo de vida e proprietário e os atal
 
 - [x] Introduzir menu lateral e navegação entre visão geral, QR Codes e estatísticas básicas por código no Lote 4.
 - [x] Entregar gaveta mobile e busca global por texto no Lote 5.
-- [ ] Integrar alternância QR Codes/Cards, atalhos de Analytics e Templates e busca por imagem quando houver contrato e módulos disponíveis.
+- [x] Integrar a navegação entre QR Codes e Cards e o acesso aos módulos publicados. Busca por imagem e modelos salvos no Lote 14.
 - [x] Mapear estados do ciclo de vida (novo, ativo, em queda, sem scans, pausado) e ligá-los da Visão geral à lista filtrada (Lote 7).
 - [x] Implementar o fluxo de criação em etapas: tipo, conteúdo, personalização e conclusão (Lote 6).
 - [x] Explicitar QR estático e dinâmico e implementar o conteúdo específico de cada tipo oferecido: Website, Texto, E-mail, Telefone, SMS e Wi-Fi no Lote 6. Tipos que dependem de Linkpages, Cards, Forms e mídia seguem no Lote 14.
 - [x] Adicionar busca, filtros, paginação e ações de edição, ativação, desativação e exclusão no Lote 4.
 - [x] Entregar visualizações, ordenação, filtros por operador, pastas, rótulos, watchlist, ações em lote e importação CSV no Lote 5.
-- [ ] Verificar os recortes por ciclo de vida e proprietário e os estados ainda indisponíveis na referência.
+- [x] Expor ciclo de vida e o filtro de criador no QRConnect. A comparação desses recortes preenchidos com a referência segue pendente.
 - [x] Entregar a etapa final de download com PNG/SVG, larguras de 512 a 2048 px e correção de erros L/M/Q/H decodificados nos testes (Lote 6).
-- [ ] Galeria de templates salvos pelo usuário, Auto Design e formatos PDF/EPS. O catálogo de templates existente é usado na etapa de design.
+- [x] Salvar, aplicar e excluir modelos do espaço no editor (Lote 14).
+- [ ] Verificar paridade da galeria separada, Auto Design e formatos PDF/EPS.
 - [x] Permitir alterar o destino de um QR dinâmico preservando a URL pública e os scans, com histórico privado (Lote 6).
 - [x] Implementar analytics por QR e visão consolidada, com filtro de período, dispositivos e país (Lote 7). Cidade depende de proxy confiável.
 - [x] Definir o significado de scanner único e o tratamento de bots e acessos repetidos antes de apresentar essa métrica (Lote 7). Retenção automática segue para decisão do proprietário.
@@ -149,14 +156,11 @@ A busca por imagem de QR, os filtros por ciclo de vida e proprietário e os atal
 
 **Objetivo:** criar e publicar páginas de links dentro do produto.
 
-- [ ] Criar modelo de dados para páginas, blocos, design, propriedade e arquivos.
-- [ ] Construir editor com foto, capa, título, descrição, links, telefone, redes sociais e separadores.
-- [ ] Permitir ordenar, editar e remover blocos com preview de celular.
-- [ ] Salvar rascunho e publicar em uma URL estável, com slug único.
-- [ ] Reproduzir galeria por categoria e salvos, criação a partir de modelo e retomada de rascunho com autosave.
-- [ ] Gerar QR para a página e permitir alterações posteriores sem mudar seu endereço.
-- [ ] Registrar visualizações e cliques conforme métricas definidas.
-- [ ] Integrar listagem e analytics ao dashboard.
+- [x] Entregar modelo de dados, editor de blocos, imagens, preview e galeria por categoria com autosave.
+- [x] Publicar em URL estável e associar QR. Listagem e analytics incluem visualizações, cliques e CSV.
+- [ ] Conferir galeria de favoritos e estados publicados na referência.
+
+Evidências no [Lote 10](docs/lotes/10-linkpages/spec.md).
 
 **Conclusão:** página publicada permanece acessível e conserva conteúdo e aparência após recarregar, sair da conta ou acessar outro dispositivo.
 
@@ -164,15 +168,11 @@ A busca por imagem de QR, os filtros por ciclo de vida e proprietário e os atal
 
 **Objetivo:** levar o editor de cartões atual até um recurso publicado e persistido.
 
-- [ ] Persistir perfil, foto, empresa, cargo, contatos, redes sociais e design.
-- [ ] Implementar armazenamento dos arquivos enviados e biblioteca de templates.
-- [ ] Publicar o cartão em URL própria e gerar seu QR Code.
-- [ ] Oferecer ações funcionais de telefone, e-mail, site e redes sociais.
-- [ ] Implementar download do contato em vCard, com suporte aos caracteres dos idiomas oferecidos.
-- [ ] Permitir reabrir e editar o cartão sem mudar seu endereço público.
-- [ ] Registrar visualizações e ações de contato definidas para a entrega.
-- [ ] Integrar cartões e estatísticas ao dashboard.
-- [ ] Criar navegação de Cards, analytics por cartão, gerenciador de contatos e o fluxo de troca de contato. Mapear eventos e conectores como extensões.
+- [x] Persistir perfil, contatos, mídia e design. Editor com estilos, publicação e QR em URL estável.
+- [x] Entregar ações públicas de contato, vCard, troca de contato com consentimento, lista de contatos e analytics.
+- [ ] Verificar estados com dados e eventos comerciais da referência. Validação do CRM real segue no Lote 17 e eventos no Lote 20.
+
+Evidências no [Lote 11](docs/lotes/11-cards/spec.md).
 
 **Conclusão:** cartão editável, publicado, compartilhável e persistido, com ações e arquivo de contato validados em celular.
 
