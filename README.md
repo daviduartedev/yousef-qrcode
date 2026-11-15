@@ -2,6 +2,8 @@
 
 Migração do produto existente para Next.js App Router, preservando as telas da landing, autenticação, gerador e meus QR Codes. Postgres, sessões e operações de QR são acessados pelo servidor. O navegador não usa o cliente Supabase, chaves administrativas ou a função Deno do projeto anterior.
 
+Os Lotes 1–5 estão na `main`. A homologação usa Vercel e Neon. Consulte o [estado atual](ROADMAPS.md) e o [roteiro para executar os próximos lotes na nuvem](docs/agents/execucao-roadmap-cloud.md). As notas de Supabase abaixo registram a preparação anterior à escolha do Neon.
+
 ## Lote 1
 
 - Branch: `feat/lote-1-nextjs-postgres`, criada de `main`.

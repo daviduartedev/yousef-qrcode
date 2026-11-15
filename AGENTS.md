@@ -11,14 +11,15 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 ## Project workflow
 
 - Each lot belongs to one feature branch created from the updated `main` of `daviduartedev/yousef-qrcode`.
-- The lot workflow is specification → tickets → implementation → code review → dvd-tests → human validation → commit/push. Do not commit, push implementation, open a PR or merge until the human has completed the requested validation.
+- The default lot workflow is specification → tickets → implementation → code review → dvd-tests → human validation → commit/push. Outside the owner-authorized run below, wait for human validation before committing implementation, pushing, opening a PR, or merging.
+- For the remaining QRConnect roadmap lots, an owner-authorized unattended run follows [the cloud execution runbook](docs/agents/execucao-roadmap-cloud.md). In that run, complete code review, automated checks and browser verification before each direct fast-forward push to `main`. Collect one human checklist at the end. Production publication (#15), deferred hosted recovery (#12) and legacy operations remain outside that authorization.
 - The initial empty main commit contains no imported application history. Do not import the old repository's Git history or environment files.
 - Integrated Lotes 1 and 2 are documented in `docs/lotes/01-nextjs-postgres/spec.md` and `docs/lotes/02-editor-qrcode/spec.md`; their local human validations are complete. Lote 3 prepares the operational closure of R0–R2 under `docs/lotes/03-transicao-operacional/`. Its number does not authorize roadmap R3 or later modules. Preserve installed skills/configuration; do not repeat setup or prior validations without a relevant change.
 - On 2026-11-02 the owner explicitly chose a fresh start: no legacy users, QR records, scans, credential compatibility or legacy URL bridge. Active Lote 3 sequence is #12 → #13 → #15; #14 is out of scope. Keep new-environment backups, restoration, staging, publication and rollback. This does not authorize deleting or shutting down the old service, or treating future production data as disposable.
 - Database, auth and private environment access belong to modules marked `server-only`. Derive resource ownership from the server session.
 - Never print secrets or place credentials in public environment variables, Git, issues, logs, screenshots or manual validation instructions. Only dummy configuration examples may be versioned.
 - Run credential checks before staging/reviewing files; preserve the local Git hooks and the CI checks.
-- Tests verify behavior through HTTP and Git/CLI boundaries, using disposable local data. Browser credentials require user authorization; do not create default login profiles.
+- Tests verify behavior through HTTP and Git/CLI boundaries, using disposable local data. Use synthetic, disposable fixtures for automated local browser tests. Hosted credentials require user authorization. Do not create default login profiles.
 
 ## Agent skills
 

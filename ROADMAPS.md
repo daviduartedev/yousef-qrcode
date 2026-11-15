@@ -6,6 +6,8 @@ Os Lotes 1 e 2 tiveram validação humana local. A [homologação](https://youse
 
 O produto usa Next.js, Better Auth e PostgreSQL. A homologação usa Vercel e Neon. O cliente ainda definirá a infraestrutura de produção. As correções do editor já foram entregues e os novos módulos da referência Uniqode continuam futuros.
 
+O [roteiro de execução na nuvem](docs/agents/execucao-roadmap-cloud.md) resume a base entregue e ordena os próximos lotes por dependência, com critérios de teste e publicação em homologação.
+
 Em 02/11/2026, o proprietário confirmou o início do zero, sem importar usuários, QR Codes ou histórico, e dispensou a ponte de URLs antigas. O serviço de origem tem operação separada. Em 11/11/2026, a recuperação hospedada continua adiada e a publicação e o retorno seguem pendentes.
 
 ## Sequência de entregas
@@ -27,11 +29,11 @@ R4 e R5 são independentes entre si. A ordem pode seguir a prioridade comercial.
 | R0 | Banco de homologação provisionado e recuperação local aceita. Backup, retenção e restauração hospedada adiados no #12. |
 | R1 | Homologação Vercel + Neon aceita no #13 com evidência HTTP e dispensa da rodada manual. |
 | R2 | Editor entregue/validado; publicação e retorno operacional pendentes; ponte antiga dispensada. |
-| R3 | Painel e gestão do Lote 4 (#19–#24) aceitos e integrados. O [Lote 5](docs/lotes/05-gestao-avancada/spec.md) entrega navegação e gestão avançada, testadas localmente, com integração direta à `main` autorizada pelo proprietário. |
+| R3 | Painel e gestão inicial do Lote 4 (#19–#24) aceitos e integrados. O [Lote 5](docs/lotes/05-gestao-avancada/spec.md) entregou navegação e gestão avançada na `main` em `f0c6f61`. CI e deploy na Vercel passaram, com a migração `0004` verificada no Neon de homologação. |
 | R4–R5 | Módulos publicados/persistidos ainda não entregues; abas/editor local herdados não os substituem. |
 | R6 | Superfícies principais mapeadas no trial. Regras e fluxos restritos a planos superiores precisam de evidência própria. |
 
-A primeira fatia do R3 segue em homologação, na Vercel e no Neon já configurados na conta do proprietário. Ver [especificação validada do painel e da gestão](docs/referencias/r3-painel-e-gestao.md). A primeira publicação e o ensaio de retorno do [#15](https://github.com/daviduartedev/yousef-qrcode/issues/15) ficam adiados. O [#12](https://github.com/daviduartedev/yousef-qrcode/issues/12) permanece aberto. Antes de publicar, confirmar ambiente, operador, origem HTTPS, retorno, observação e critérios para liberar, além de decidir como tratar a recuperação adiada. Ver [acessos e decisões](docs/lotes/03-transicao-operacional/acessos-e-decisoes.md).
+Os Lotes 4 e 5 estão em homologação na Vercel e no Neon. Ver [especificação validada do painel e da gestão](docs/referencias/r3-painel-e-gestao.md). A primeira publicação em produção e o ensaio de retorno do [#15](https://github.com/daviduartedev/yousef-qrcode/issues/15) ficam adiados. O [#12](https://github.com/daviduartedev/yousef-qrcode/issues/12) permanece aberto. Antes de publicar em produção, confirmar ambiente, operador, origem HTTPS, retorno, observação e critérios para liberar, além de decidir como tratar a recuperação adiada. Ver [acessos e decisões](docs/lotes/03-transicao-operacional/acessos-e-decisoes.md).
 
 ## Ordem do trabalho de paridade
 
@@ -76,7 +78,7 @@ A busca por imagem de QR, os filtros por ciclo de vida e proprietário e os atal
 - [ ] Conferir permissões efetivas no novo ambiente de produção e gravação de scans controlada pelo backend; não copiar políticas públicas de inserção do legado.
 - [ ] Configurar credenciais novas privadamente e verificar necessidade de rotação caso haja exposição comprovada. Segredos antigos não são reutilizados nem divulgados; nenhuma exposição privada foi comprovada nesta preparação.
 
-**Conclusão vigente:** novo ambiente inventariado e recuperável, referência preservada, novas contas no fluxo existente e dispensa do legado registrada. Recuperação ainda precisa ser comprovada.
+**Estado da entrega:** a recuperação foi ensaiada com dados locais descartáveis. A comprovação hospedada, a retenção e as decisões de produção seguem nos tickets operacionais.
 
 ## R1 — Migração para Next.js + Postgres
 
@@ -119,19 +121,21 @@ A busca por imagem de QR, os filtros por ciclo de vida e proprietário e os atal
 - [x] Documentar o procedimento de retorno compatível com design/tracking e gravações posteriores à troca.
 - [ ] Ensaiar e comprovar esse retorno no ambiente operacional, sem perder gravações novas.
 
-**Conclusão vigente:** fluxo do editor já validado localmente e operação em produção no novo banco comprovada, preservando dados criados no novo ambiente e com retorno ensaiado. Compatibilidade antiga foi dispensada.
+**Estado da entrega:** editor validado localmente e base em homologação. A paridade do site público e da entrada segue na fila. A publicação em produção e o ensaio de retorno seguem no #15.
 
 ## R3 — Gestão de QR Codes e analytics
 
 **Objetivo:** transformar o gerador em uma área de gestão consistente.
 
 - [x] Introduzir menu lateral e navegação entre visão geral, QR Codes e estatísticas básicas por código no Lote 4.
-- [ ] Completar paridade da navegação com gaveta mobile, alternância QR Codes/Cards, busca global e atalhos de Analytics e Templates.
+- [x] Entregar gaveta mobile e busca global por texto no Lote 5.
+- [ ] Integrar alternância QR Codes/Cards, atalhos de Analytics e Templates e busca por imagem quando houver contrato e módulos disponíveis.
 - [ ] Mapear estados do ciclo de vida e alinhar a composição da Visão geral com conta vazia e com atividade.
 - [ ] Implementar o fluxo de criação em etapas: tipo, conteúdo, personalização e conclusão.
 - [ ] Explicitar QR estático e dinâmico e implementar o conteúdo específico de cada tipo oferecido.
 - [x] Adicionar busca, filtros, paginação e ações de edição, ativação, desativação e exclusão no Lote 4.
-- [ ] Completar listagem com visualizações, ordenação, filtros por operador, pastas, rótulos, watchlist e operações em lote.
+- [x] Entregar visualizações, ordenação, filtros por operador, pastas, rótulos, watchlist, ações em lote e importação CSV no Lote 5.
+- [ ] Verificar os recortes por ciclo de vida e proprietário e os estados ainda indisponíveis na referência.
 - [ ] Entregar galeria de templates e a etapa final de download, com formatos, tamanhos e correção de erros verificados.
 - [ ] Permitir alterar o destino de um QR dinâmico preservando a URL pública.
 - [ ] Implementar analytics por QR e visão consolidada, com filtro de período, dispositivos e localização aproximada disponível.
