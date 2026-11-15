@@ -1050,3 +1050,119 @@ test("account email is capped per account without changing the public answer", a
   }
   assert.equal(sent, 3);
 });
+
+const tinyPng = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", "base64");
+async function uploadFile(cookie, bytes, name, extra = {}) {
+  const form = new FormData();
+  form.set("file", new Blob([bytes]), name);
+  for (const [key, value] of Object.entries(extra)) form.set(key, value);
+  return fetch(new URL("/api/assets", base), { method: "POST", redirect: "manual", headers: { origin: base, cookie }, body: form });
+}
+
+test("asset uploads keep the detected type, serve safely and stay private to the account", async () => {
+  const owner = await register();
+  const other = await register();
+  const upload = await uploadFile(owner, tinyPng, "logo.png");
+  assert.equal(upload.status, 201);
+  const { asset } = await upload.json();
+  assert.equal(asset.kind, "image");
+  assert.equal(asset.mime_type, "image/png");
+  assert.deepEqual([asset.width, asset.height, asset.size_bytes], [1, 1, tinyPng.length]);
+  const pdf = await (await uploadFile(owner, Buffer.from("%PDF-1.4\n%%EOF\n"), "menu.txt")).json();
+  assert.equal(pdf.asset.mime_type, "application/pdf");
+  assert.equal(pdf.asset.name, "menu.txt");
+
+  const file = await request(`/api/assets/${asset.id}/file`, { cookie: owner });
+  assert.equal(file.status, 200);
+  assert.equal(file.headers.get("content-type"), "image/png");
+  assert.equal(file.headers.get("x-content-type-options"), "nosniff");
+  assert.match(file.headers.get("content-security-policy"), /sandbox/);
+  assert.match(file.headers.get("cache-control"), /no-store/);
+  assert.deepEqual(Buffer.from(await file.arrayBuffer()), tinyPng);
+  assert.match((await request(`/api/assets/${pdf.asset.id}/file?download=1`, { cookie: owner })).headers.get("content-disposition"), /^attachment/);
+
+  const list = await (await request("/api/assets", { cookie: owner })).json();
+  assert.equal(list.total, 2);
+  assert.equal(list.usage.bytes, tinyPng.length + pdf.asset.size_bytes);
+  assert.equal((await (await request("/api/assets?kind=document", { cookie: owner })).json()).items[0].id, pdf.asset.id);
+
+  assert.equal((await (await request("/api/assets", { cookie: other })).json()).total, 0);
+  assert.equal((await request(`/api/assets/${asset.id}/file`, { cookie: other })).status, 404);
+  assert.equal((await request(`/api/assets/${asset.id}`, { method: "PATCH", cookie: other, body: { name: "stolen" } })).status, 404);
+  assert.equal((await request(`/api/assets/${asset.id}`, { method: "DELETE", cookie: other })).status, 404);
+  assert.equal((await request(`/api/assets/${asset.id}/file`)).status, 401);
+  const foreignOrigin = await fetch(new URL("/api/assets", base), { method: "POST", headers: { origin: "https://evil.example", cookie: owner }, body: new FormData() });
+  assert.equal(foreignOrigin.status, 403);
+});
+
+test("asset uploads reject disguised, empty, oversized and over-quota files", async () => {
+  const cookie = await register();
+  const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>');
+  assert.equal((await uploadFile(cookie, svg, "logo.svg")).status, 415);
+  assert.equal((await uploadFile(cookie, Buffer.from("plain text pretending"), "photo.png")).status, 415);
+  assert.equal((await uploadFile(cookie, Buffer.alloc(0), "empty.png")).status, 400);
+  const big = Buffer.concat([tinyPng, Buffer.alloc(4 * 1024 * 1024)]);
+  assert.equal((await uploadFile(cookie, big, "big.png")).status, 413);
+  const chunk = Buffer.concat([tinyPng, Buffer.alloc(4 * 1024 * 1024 - tinyPng.length)]);
+  for (let index = 0; index < 12; index++) assert.equal((await uploadFile(cookie, chunk, `chunk-${index}.png`)).status, 201);
+  const full = await uploadFile(cookie, chunk, "one-more.png");
+  assert.equal(full.status, 409);
+  assert.match((await full.json()).error, /space/);
+  const usage = (await (await request("/api/assets", { cookie })).json()).usage;
+  assert.equal(usage.bytes, 12 * chunk.length);
+});
+
+test("asset folders, renaming, search and QR logo reuse are scoped to the account", async () => {
+  const owner = await register();
+  const other = await register();
+  const { asset } = await (await uploadFile(owner, tinyPng, "Brand mark.png")).json();
+  const { asset: pdf } = await (await uploadFile(owner, Buffer.from("%PDF-1.4\n"), "Menu.pdf")).json();
+  const created = await request("/api/asset-folders", { method: "POST", cookie: owner, body: { action: "create", name: "Logos" } });
+  assert.equal(created.status, 200);
+  const folder = (await created.json()).folders[0];
+  assert.equal((await request("/api/asset-folders", { method: "POST", cookie: owner, body: { action: "create", name: "Logos" } })).status, 409);
+  const otherFolder = (await (await request("/api/asset-folders", { method: "POST", cookie: other, body: { action: "create", name: "Mine" } })).json()).folders[0];
+  assert.equal((await request(`/api/assets/${asset.id}`, { method: "PATCH", cookie: owner, body: { folder_id: otherFolder.id } })).status, 404);
+  const moved = await request(`/api/assets/${asset.id}`, { method: "PATCH", cookie: owner, body: { folder_id: folder.id, name: "  Logo principal / v2 " } });
+  assert.equal(moved.status, 200);
+  assert.equal((await moved.json()).asset.name, "Logo principal  v2");
+  const inFolder = await (await request(`/api/assets?folder=${folder.id}`, { cookie: owner })).json();
+  assert.deepEqual(inFolder.items.map((item) => item.id), [asset.id]);
+  assert.equal(inFolder.folders[0].files, 1);
+  assert.deepEqual((await (await request("/api/assets?q=principal", { cookie: owner })).json()).items.map((item) => item.id), [asset.id]);
+  assert.equal((await (await request("/api/assets?q=%25", { cookie: owner })).json()).total, 0);
+
+  const design = { ...savedDesign, logoId: null, logoAssetId: asset.id };
+  const qr = await request("/api/qr-codes", { method: "POST", cookie: owner, body: { title: "With library logo", destination_url: "https://example.test/", design } });
+  assert.equal(qr.status, 201);
+  const qrId = (await qr.json()).qrCode.id;
+  for (const [cookie, logoAssetId] of [[other, asset.id], [owner, pdf.id], [owner, randomUUID()]]) {
+    const refused = await request("/api/qr-codes", { method: "POST", cookie, body: { title: "x", destination_url: "https://example.test/", design: { ...design, logoAssetId } } });
+    assert.equal(refused.status, 400);
+  }
+  assert.equal((await (await request(`/api/assets?folder=${folder.id}`, { cookie: owner })).json()).items[0].qr_uses, 1);
+
+  await request("/api/asset-folders", { method: "POST", cookie: owner, body: { action: "delete", id: folder.id } });
+  const afterFolder = await (await request("/api/assets?folder=none", { cookie: owner })).json();
+  assert.equal(afterFolder.total, 2);
+  assert.equal(afterFolder.folders.length, 0);
+
+  const removed = await request(`/api/assets/${asset.id}`, { method: "DELETE", cookie: owner });
+  assert.equal(removed.status, 200);
+  assert.equal((await removed.json()).qr_codes_updated, 1);
+  const saved = await (await request(`/api/qr-codes/${qrId}`, { cookie: owner })).json();
+  assert.equal(saved.qrCode.design.logoAssetId, undefined);
+  assert.equal(saved.qrCode.design.templateId, savedDesign.templateId);
+  assert.equal((await request(`/api/assets/${asset.id}/file`, { cookie: owner })).status, 404);
+});
+
+test("asset downloads use safe file names and PDFs stay viewable", async () => {
+  const cookie = await register();
+  const { asset } = await (await uploadFile(cookie, Buffer.from("%PDF-1.4\n"), "menu'(v2)‮.html")).json();
+  assert.equal(asset.name, "menu'(v2).html");
+  const file = await request(`/api/assets/${asset.id}/file?download=1`, { cookie });
+  const disposition = file.headers.get("content-disposition");
+  assert.match(disposition, /^attachment; filename="file\.pdf"; filename\*=UTF-8''menu%27%28v2%29\.html$/);
+  assert.doesNotMatch(file.headers.get("content-security-policy"), /sandbox/);
+  assert.equal(file.headers.get("content-type"), "application/pdf");
+});

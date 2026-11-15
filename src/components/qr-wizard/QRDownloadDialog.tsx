@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { downloadQR, qrFileSizes, type QRFileFormat, type QRFileSize } from "@/lib/qr-export";
 import { allowedErrorCorrection, type ErrorCorrectionLevel } from "@/lib/qr-matrix";
 import type { QRDesign } from "@/lib/qr-design";
+import { useAssetImage } from "@/lib/asset-image";
 
 const QRCodePreview = dynamic(() => import("@/components/QRCodePreview"), { ssr: false });
 
@@ -34,9 +35,12 @@ export function QRDownloadDialog({ data, design, name, disabled, onError }: Prop
   const render = useRef<HTMLDivElement>(null);
   const [format, setFormat] = useState<QRFileFormat>("png");
   const [size, setSize] = useState<QRFileSize>(1024);
-  const levels = allowedErrorCorrection(Boolean(design.logoId));
+  const levels = allowedErrorCorrection(Boolean(design.logoId || design.logoAssetId));
   const [level, setLevel] = useState<ErrorCorrectionLevel>("H");
   const [busy, setBusy] = useState(false);
+  // Library logos are loaded before export so the file never misses the image.
+  const logoImage = useAssetImage(design.logoAssetId ?? null);
+  const logoLoading = Boolean(design.logoAssetId) && logoImage === undefined;
   const effectiveLevel = levels.includes(level) ? level : "H";
 
   const save = async () => {
@@ -97,14 +101,14 @@ export function QRDownloadDialog({ data, design, name, disabled, onError }: Prop
                 <option key={value} value={value}>{`${value} · ${t(levelHints[value])}`}</option>
               ))}
             </select>
-            {design.logoId && <p className="text-xs text-muted-foreground">{t("Logos cover part of the code, so only Q and H are offered.")}</p>}
+            {(design.logoId || design.logoAssetId) && <p className="text-xs text-muted-foreground">{t("Logos cover part of the code, so only Q and H are offered.")}</p>}
           </div>
           <div ref={render} className="flex justify-center rounded-md border border-border bg-background p-3" aria-label={t("Download preview")}>
-            <QRCodePreview data={data} design={design} width={160} errorCorrection={effectiveLevel} />
+            <QRCodePreview data={data} design={design} width={160} errorCorrection={effectiveLevel} logoImage={design.logoAssetId ? logoImage ?? null : undefined} />
           </div>
           <div className="flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={() => dialog.current?.close()}>{t("Cancel")}</Button>
-            <Button type="submit" disabled={busy}>{busy ? t("Downloading...") : t("Download")}</Button>
+            <Button type="submit" disabled={busy || logoLoading}>{busy ? t("Downloading...") : t("Download")}</Button>
           </div>
         </form>
       </dialog>

@@ -9,6 +9,7 @@ import {
   type QRPaint,
 } from "@/lib/qr-design";
 import { logos } from "./qr-catalog";
+import { useAssetImage } from "@/lib/asset-image";
 
 type Props = {
   data: string;
@@ -17,6 +18,8 @@ type Props = {
   height?: number;
   id?: string;
   errorCorrection?: ErrorCorrectionLevel;
+  /** Preloaded data URL of the library logo; loaded on demand when omitted. */
+  logoImage?: string | null;
 };
 
 function Paint({ id, paint }: { id: string; paint: QRPaint }) {
@@ -57,10 +60,13 @@ export default function QRCodePreview({
   height,
   id,
   errorCorrection = "H",
+  logoImage,
 }: Props) {
   const { t: copy } = useTranslation("copy");
   const uid = useId().replace(/[^a-zA-Z0-9_-]/g, "");
   const parsed = qrDesignSchema.safeParse(design);
+  const assetId = parsed.success ? parsed.data.logoAssetId ?? null : null;
+  const loadedLogo = useAssetImage(logoImage === undefined ? assetId : null);
   const matrix = useMemo(
     () => qrMatrix(data, errorCorrection),
     [data, errorCorrection],
@@ -84,8 +90,11 @@ export default function QRCodePreview({
   const count = matrix.length;
   const scale = area / (count + 8);
   const origin = inset + 4 * scale;
-  const logo = logos.find((item) => item.id === config.logoId);
-  const logoModules = logo ? Math.max(3, Math.floor(count * 0.15)) : 0;
+  const libraryLogo = assetId ? (logoImage === undefined ? loadedLogo : logoImage) : null;
+  const logo = assetId ? undefined : logos.find((item) => item.id === config.logoId);
+  // A library logo that cannot be loaded (deleted meanwhile) renders as no logo, never as a blank square.
+  const hasLogo = Boolean(logo || (assetId && libraryLogo !== null));
+  const logoModules = hasLogo ? Math.max(3, Math.floor(count * 0.15)) : 0;
   const logoStart = Math.floor((count - logoModules) / 2);
   const logoEnd = logoStart + logoModules;
   const paint = (part: QRPaint, name: string) =>
@@ -101,7 +110,7 @@ export default function QRCodePreview({
       if (
         !dark ||
         finder ||
-        (logo &&
+        (hasLogo &&
           r >= logoStart - 1 &&
           r <= logoEnd &&
           c >= logoStart - 1 &&
@@ -256,6 +265,28 @@ export default function QRCodePreview({
       <rect x={inset} y={inset} width={area} height={area} fill={bgPaint} />
       <g fill={dotsPaint}>{modules}</g>
       {eyes}
+      {assetId && libraryLogo !== null && (
+        <>
+          <rect
+            x={logoX - scale}
+            y={logoX - scale}
+            width={logoSize + 2 * scale}
+            height={logoSize + 2 * scale}
+            rx={scale * 0.5}
+            fill="#ffffff"
+          />
+          {libraryLogo && (
+            <image
+              href={libraryLogo}
+              x={logoX}
+              y={logoX}
+              width={logoSize}
+              height={logoSize}
+              preserveAspectRatio="xMidYMid meet"
+            />
+          )}
+        </>
+      )}
       {logo && (
         <>
           <rect

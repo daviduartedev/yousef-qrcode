@@ -88,10 +88,12 @@ test('legacy types map to website and Wi-Fi lists hide the password', () => {
 
 test('new copy namespaces have the same keys in English and Arabic', async () => {
   const { readFile } = await import('node:fs/promises');
-  for (const name of ['creation', 'analytics', 'entry']) {
+  for (const name of ['creation', 'analytics', 'entry', 'assets']) {
     const en = JSON.parse(await readFile(new URL(`../src/locales/${name}.en.json`, import.meta.url), 'utf8'));
     const ar = JSON.parse(await readFile(new URL(`../src/locales/${name}.ar.json`, import.meta.url), 'utf8'));
-    assert.deepEqual(Object.keys(ar).sort(), Object.keys(en).sort(), name);
+    // English may add i18next plural forms (`_one`); Arabic plural rules fall back to the base key.
+    const base = (keys) => keys.filter((key) => !/_(zero|one|two|few|many)$/.test(key)).sort();
+    assert.deepEqual(base(Object.keys(ar)), base(Object.keys(en)), name);
     for (const [key, value] of Object.entries(ar)) assert.ok(value.trim(), `Arabic ${name} copy for ${key}`);
   }
 });

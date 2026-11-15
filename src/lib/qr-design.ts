@@ -74,6 +74,8 @@ export const qrDesignSchema = z
       .strict(),
     backgroundOptions: z.object(paint).strict(),
     logoId: z.enum(logoIds).nullable(),
+    /** An image from the account's asset library; takes precedence over `logoId`. */
+    logoAssetId: z.uuid().nullable().optional(),
     frame: z
       .object({
         style: z.enum(frameStyles),

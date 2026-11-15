@@ -1,3 +1,4 @@
+import { LibraryLogoPicker } from "@/components/assets/LibraryLogoPicker";
 import { useState, useEffect, useRef, useCallback } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
@@ -112,7 +113,10 @@ const QRGenerator = () => {
     setDesign((previous) => ({
       ...previous,
       logoId: qrDesignSchema.shape.logoId.parse(id),
+      logoAssetId: null,
     }));
+  const setLibraryLogo = (id: string | null) =>
+    setDesign((previous) => ({ ...previous, logoId: null, logoAssetId: id }));
   const setSelectedTemplate = (id: number) =>
     setDesign(
       structuredClone(templates.find((item) => item.id === id)!.design),
@@ -1175,6 +1179,8 @@ const QRGenerator = () => {
                       );
                     })}
                   </div>
+
+                  <LibraryLogoPicker selected={design.logoAssetId ?? null} onSelect={setLibraryLogo} />
 
                   <button
                     onClick={() => setSelectedLogo(null)}
