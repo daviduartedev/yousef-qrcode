@@ -1,232 +1,212 @@
 "use client";
-import { useTranslation } from "react-i18next";
-import { useState, useEffect } from "react";
+import Link from "next/link";
+import { useEffect, useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslation } from "react-i18next";
+import { Eye, EyeOff, Loader2, Lock, Mail, QrCode, User } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
 import { useAuth } from "@/hooks/useAuth";
+import { safeReturnPath, type AuthMode } from "@/lib/auth-paths";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useToast } from "@/hooks/use-toast";
-import { Eye, EyeOff, Loader2, Mail, Lock } from "lucide-react";
 import { LanguageToggle } from "@/components/LanguageToggle";
-const Auth = () => {
-  const { t: copy } = useTranslation("copy");
-  const [isLogin, setIsLogin] = useState(true);
+
+type Field = "name" | "email" | "password" | "confirm";
+type Errors = Partial<Record<Field | "form", string>>;
+export type AuthNotice = "reset" | "verified" | "verify-failed" | null;
+
+const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+export function AuthCard({ title, description, children }: { title: string; description: string; children: React.ReactNode }) {
+  return (
+    <main className="min-h-screen bg-background flex items-center justify-center p-4">
+      <div className="w-full max-w-md">
+        <div className="flex justify-end mb-4"><LanguageToggle /></div>
+        <Link href="/" className="flex items-center justify-center gap-2 mb-8">
+          <span className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
+            <QrCode className="w-6 h-6 text-primary-foreground" aria-hidden="true" />
+          </span>
+          <span className="text-2xl font-bold">QRConnect</span>
+        </Link>
+        <section className="bg-card border border-border rounded-xl p-6 sm:p-8 shadow-lg" aria-labelledby="auth-title">
+          <h1 id="auth-title" className="text-2xl font-bold text-center mb-2">{title}</h1>
+          <p className="text-muted-foreground text-center mb-6">{description}</p>
+          {children}
+        </section>
+      </div>
+    </main>
+  );
+}
+
+export function FieldError({ id, message }: { id: string; message?: string }) {
+  return message ? <p id={id} className="text-sm text-destructive">{message}</p> : null;
+}
+
+export function FormAlert({ message, tone = "error" }: { message?: string; tone?: "error" | "success" }) {
+  if (!message) return null;
+  const style = tone === "error" ? "border-destructive/40 bg-destructive/10 text-destructive" : "border-emerald-500/40 bg-emerald-500/10 text-emerald-800 dark:text-emerald-200";
+  return <div role={tone === "error" ? "alert" : "status"} className={`rounded-md border px-3 py-2 text-sm ${style}`}>{message}</div>;
+}
+
+const Auth = ({ initialMode, next, notice, emailAvailable }: { initialMode: AuthMode; next: string | null; notice: AuthNotice; emailAvailable: boolean }) => {
+  const { t } = useTranslation("entry");
+  const id = useId();
+  const router = useRouter();
+  const { user } = useAuth();
+  const [mode, setMode] = useState<AuthMode>(initialMode);
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const navigate = useRouter().push;
-  const { user } = useAuth();
-  const { toast } = useToast();
-  useEffect(() => {
-    if (user) navigate("/overview");
-  }, [user, navigate]);
-  const handleSubmit = async (event: React.FormEvent) => {
+  const [errors, setErrors] = useState<Errors>({});
+  const formRef = useRef<HTMLFormElement>(null);
+  const destination = safeReturnPath(next);
+  const isLogin = mode === "signin";
+
+  useEffect(() => { if (user) router.replace(destination); }, [user, router, destination]);
+
+  function switchMode(nextMode: AuthMode) {
+    setMode(nextMode);
+    setPassword("");
+    setConfirm("");
+    setErrors({});
+    const query = new URLSearchParams();
+    if (nextMode === "signup") query.set("mode", "signup");
+    if (next) query.set("next", destination);
+    router.replace(query.size ? `/auth?${query}` : "/auth", { scroll: false });
+  }
+
+  function validate(): Errors {
+    const found: Errors = {};
+    if (!isLogin && !name.trim()) found.name = t("Enter your name.");
+    if (!emailPattern.test(email.trim())) found.email = t("Enter a valid email address.");
+    if (!password) found.password = t("Enter your password.");
+    else if (!isLogin && password.length < 8) found.password = t("Use at least 8 characters.");
+    else if (!isLogin && password.length > 128) found.password = t("Use at most 128 characters.");
+    if (!isLogin && password && confirm !== password) found.confirm = t("The passwords do not match.");
+    return found;
+  }
+
+  function focusFirst(found: Errors) {
+    const order: Field[] = ["name", "email", "password", "confirm"];
+    const first = order.find((field) => found[field]);
+    if (first) formRef.current?.querySelector<HTMLInputElement>(`[name="${first}"]`)?.focus();
+  }
+
+  async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
-    if (!isLogin && password !== confirmPassword) {
-      toast({
-        title: copy("Erro"),
-        description: copy("As senhas não coincidem"),
-        variant: "destructive",
-      });
-      return;
-    }
-    if (!isLogin && password.length < 8) {
-      toast({
-        title: copy("Erro"),
-        description: copy("Senha deve ter no mínimo 8 caracteres"),
-        variant: "destructive",
-      });
-      return;
-    }
+    const found = validate();
+    setErrors(found);
+    if (Object.keys(found).length) { focusFirst(found); return; }
     setIsLoading(true);
     try {
       const result = isLogin
-        ? await authClient.signIn.email({ email, password })
-        : await authClient.signUp.email({
-            email,
-            password,
-            name: email.split("@")[0],
-          });
+        ? await authClient.signIn.email({ email: email.trim(), password })
+        : await authClient.signUp.email({ email: email.trim(), password, name: name.trim(), callbackURL: `/auth?verified=1&next=${encodeURIComponent(destination)}` });
       if (result.error) {
-        toast({
-          title: copy("Erro"),
-          description: copy(
-            isLogin
-              ? "Email ou senha incorretos"
-              : "Não foi possível criar a conta. Verifique os dados e tente novamente.",
-          ),
-          variant: "destructive",
-        });
-      } else navigate("/overview");
+        const status = result.error.status;
+        const message = status === 429 ? t("Too many attempts. Wait a minute and try again.")
+          : isLogin ? t("Email or password is incorrect.")
+          : t("We could not create the account. If you already have one, sign in instead.");
+        setErrors({ form: message });
+        return;
+      }
+      router.replace(destination);
+      router.refresh();
     } catch {
-      toast({
-        title: copy("Erro"),
-        description: copy("Não foi possível conectar. Tente novamente."),
-        variant: "destructive",
-      });
+      setErrors({ form: t("Could not connect. Check your connection and try again.") });
     } finally {
       setIsLoading(false);
     }
-  };
+  }
+
+  const noticeText = notice === "reset" ? t("Your password was changed. Sign in with the new password.")
+    : notice === "verified" ? t("Your email is confirmed.")
+    : notice === "verify-failed" ? t("This confirmation link is invalid or expired.") : undefined;
+  const describedBy = (field: Field) => errors[field] ? `${id}-${field}-error` : undefined;
+
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
-        <div className="flex justify-end mb-4">
-          <LanguageToggle />
-        </div>
-        {/* Logo */}
-        <div className="flex items-center justify-center gap-2 mb-8">
-          <div className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
-            <div className="w-6 h-6 bg-primary-foreground rounded-full" />
+    <AuthCard
+      title={t(isLogin ? "Welcome back" : "Create your account")}
+      description={t(isLogin ? "Sign in to manage your QR codes." : "Sign up to create and track QR codes.")}
+    >
+      <div className="space-y-4">
+        <FormAlert message={noticeText} tone={notice === "verify-failed" ? "error" : "success"} />
+        <FormAlert message={errors.form} />
+        <form ref={formRef} onSubmit={handleSubmit} noValidate className="space-y-4">
+          {!isLogin && (
+            <div className="space-y-2">
+              <label htmlFor={`${id}-name`} className="text-sm font-medium">{t("Name")}</label>
+              <div className="relative">
+                <User className="absolute start-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" aria-hidden="true" />
+                <Input id={`${id}-name`} name="name" autoComplete="name" maxLength={80} value={name}
+                  onChange={(e) => setName(e.target.value)} className="ps-10" disabled={isLoading}
+                  aria-invalid={Boolean(errors.name)} aria-describedby={describedBy("name")} />
+              </div>
+              <FieldError id={`${id}-name-error`} message={errors.name} />
+            </div>
+          )}
+          <div className="space-y-2">
+            <label htmlFor={`${id}-email`} className="text-sm font-medium">{t("Email")}</label>
+            <div className="relative">
+              <Mail className="absolute start-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" aria-hidden="true" />
+              <Input id={`${id}-email`} name="email" type="email" inputMode="email" autoComplete="email" dir="ltr"
+                placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)}
+                className="ps-10" disabled={isLoading} aria-invalid={Boolean(errors.email)} aria-describedby={describedBy("email")} />
+            </div>
+            <FieldError id={`${id}-email-error`} message={errors.email} />
           </div>
-          <span className="text-2xl font-bold">QRConnect</span>
-        </div>
-
-        {/* Card */}
-        <div className="bg-card border border-border rounded-xl p-8 shadow-lg">
-          <h1 className="text-2xl font-bold text-center mb-2">
-            {copy(isLogin ? "Bem-vindo de volta!" : "Criar conta")}
-          </h1>
-          <p className="text-muted-foreground text-center mb-6">
-            {copy(
-              isLogin
-                ? "Entre na sua conta para continuar"
-                : "Cadastre-se para começar a criar QR codes",
-            )}
-          </p>
-
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <label htmlFor="auth-email" className="text-sm font-medium">
-                {copy("Email")}
-              </label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  id="auth-email"
-                  required
-                  autoComplete="email"
-                  type="email"
-                  placeholder={copy("seu@email.com")}
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="pl-10"
-                  disabled={isLoading}
-                />
-              </div>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-3">
+              <label htmlFor={`${id}-password`} className="text-sm font-medium">{t("Password")}</label>
+              {isLogin && <Link href="/auth/forgot-password" className="text-sm text-primary hover:underline">{t("Forgot password?")}</Link>}
             </div>
-
-            <div className="space-y-2">
-              <label htmlFor="auth-password" className="text-sm font-medium">
-                {copy("Senha")}
-              </label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  id="auth-password"
-                  required
-                  autoComplete={isLogin ? "current-password" : "new-password"}
-                  type={showPassword ? "text" : "password"}
-                  placeholder={copy("••••••••")}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="pl-10 pr-10"
-                  disabled={isLoading}
-                />
-                <button
-                  type="button"
-                  aria-label={copy(
-                    showPassword ? "Ocultar senha" : "Mostrar senha",
-                  )}
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                >
-                  {showPassword ? (
-                    <EyeOff className="w-4 h-4" />
-                  ) : (
-                    <Eye className="w-4 h-4" />
-                  )}
-                </button>
-              </div>
-            </div>
-
-            {!isLogin && (
-              <div className="space-y-2">
-                <label
-                  htmlFor="auth-confirm-password"
-                  className="text-sm font-medium"
-                >
-                  {copy("Confirmar Senha")}
-                </label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input
-                    id="auth-confirm-password"
-                    required
-                    autoComplete="new-password"
-                    type={showPassword ? "text" : "password"}
-                    placeholder={copy("••••••••")}
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    className="pl-10"
-                    disabled={isLoading}
-                  />
-                </div>
-              </div>
-            )}
-
-            <Button
-              type="submit"
-              className="w-full"
-              size="lg"
-              disabled={isLoading}
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  {copy(isLogin ? "Entrando..." : "Criando conta...")}
-                </>
-              ) : isLogin ? (
-                copy("Fazer login")
-              ) : (
-                copy("Criar conta")
-              )}
-            </Button>
-          </form>
-
-          <div className="mt-6 text-center">
-            <p className="text-sm text-muted-foreground">
-              {copy(isLogin ? "Não tem uma conta?" : "Já tem uma conta?")}
-              {copy(" ")}
-              <button
-                type="button"
-                onClick={() => {
-                  setIsLogin(!isLogin);
-                  setPassword("");
-                  setConfirmPassword("");
-                }}
-                className="text-primary hover:underline font-medium"
-              >
-                {copy(isLogin ? "Cadastre-se" : "Fazer login")}
+            <div className="relative">
+              <Lock className="absolute start-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" aria-hidden="true" />
+              <Input id={`${id}-password`} name="password" type={showPassword ? "text" : "password"} dir="ltr"
+                autoComplete={isLogin ? "current-password" : "new-password"} value={password}
+                onChange={(e) => setPassword(e.target.value)} className="ps-10 pe-10" disabled={isLoading}
+                aria-invalid={Boolean(errors.password)} aria-describedby={describedBy("password") ?? (!isLogin ? `${id}-password-hint` : undefined)} />
+              <button type="button" aria-label={t(showPassword ? "Hide password" : "Show password")} aria-pressed={showPassword}
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute end-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
-            </p>
+            </div>
+            {!isLogin && !errors.password && <p id={`${id}-password-hint`} className="text-xs text-muted-foreground">{t("At least 8 characters.")}</p>}
+            <FieldError id={`${id}-password-error`} message={errors.password} />
           </div>
-        </div>
-
-        {/* Back to home */}
-        <div className="text-center mt-6">
-          <button
-            onClick={() => navigate("/")}
-            className="text-sm text-muted-foreground hover:text-foreground"
-          >
-            {copy("← Voltar para a página inicial")}
+          {!isLogin && (
+            <div className="space-y-2">
+              <label htmlFor={`${id}-confirm`} className="text-sm font-medium">{t("Confirm password")}</label>
+              <div className="relative">
+                <Lock className="absolute start-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" aria-hidden="true" />
+                <Input id={`${id}-confirm`} name="confirm" type={showPassword ? "text" : "password"} dir="ltr"
+                  autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)}
+                  className="ps-10" disabled={isLoading} aria-invalid={Boolean(errors.confirm)} aria-describedby={describedBy("confirm")} />
+              </div>
+              <FieldError id={`${id}-confirm-error`} message={errors.confirm} />
+            </div>
+          )}
+          <Button type="submit" className="w-full" size="lg" disabled={isLoading}>
+            {isLoading ? <><Loader2 className="w-4 h-4 me-2 animate-spin" aria-hidden="true" />{t(isLogin ? "Signing in…" : "Creating account…")}</>
+              : t(isLogin ? "Sign in" : "Create account")}
+          </Button>
+          {!isLogin && emailAvailable && <p className="text-xs text-muted-foreground text-center">{t("We will email you a link to confirm your address.")}</p>}
+        </form>
+        <p className="text-sm text-muted-foreground text-center">
+          {t(isLogin ? "New to QRConnect?" : "Already have an account?")}{" "}
+          <button type="button" onClick={() => switchMode(isLogin ? "signup" : "signin")} className="text-primary hover:underline font-medium">
+            {t(isLogin ? "Create an account" : "Sign in")}
           </button>
-        </div>
+        </p>
       </div>
-    </div>
+      <p className="text-center mt-6">
+        <Link href="/" className="text-sm text-muted-foreground hover:text-foreground">{t("Back to home")}</Link>
+      </p>
+    </AuthCard>
   );
 };
 

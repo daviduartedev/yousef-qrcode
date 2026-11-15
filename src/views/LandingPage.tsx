@@ -15,17 +15,20 @@ import { TestimonialsSection } from "@/components/TestimonialsSection";
 import { FAQSection } from "@/components/FAQSection";
 import { CTASection } from "@/components/CTASection";
 import { Footer } from "@/components/Footer";
-import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { useAuth } from "@/hooks/useAuth";
 const dashboardPreview = '/assets/dashboard-preview.png';
 
 const LandingPage = () => {
   const { t: copy } = useTranslation('copy');
-  const navigate = useRouter().push;
+  const { isAuthenticated } = useAuth();
 
   return (
     <div className="min-h-screen bg-background">
+      <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:start-4 focus:top-4 focus:z-50 focus:rounded focus:bg-background focus:px-3 focus:py-2">{copy("Skip to content")}</a>
       <LandingHeader />
 
+      <main id="main">
       {/* Hero Section */}
       <section className="py-16 px-6 bg-background">
         <div className="max-w-7xl mx-auto">
@@ -45,18 +48,18 @@ const LandingPage = () => {
 
               <div className="flex flex-col sm:flex-row gap-4 pt-4">
                 <Button
+                  asChild
                   size="lg"
                   className="bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg px-8 h-12 text-base font-medium"
-                  onClick={() => navigate("/app")}
                 >
-                  {copy("Start Free Trial")}</Button>
+                  <Link href={isAuthenticated ? "/app" : "/auth?mode=signup"}>{copy(isAuthenticated ? "Create QR Code" : "Start Free Trial")}</Link></Button>
                 <Button
+                  asChild
                   size="lg"
                   variant="outline"
                   className="border-2 border-primary text-primary hover:bg-primary hover:text-primary-foreground rounded-lg px-8 h-12 text-base font-medium bg-transparent"
-                  onClick={() => navigate("/app")}
                 >
-                  {copy("Book a Demo")}</Button>
+                  <a href="#features">{copy("Explore features")}</a></Button>
               </div>
             </div>
 
@@ -123,6 +126,7 @@ const LandingPage = () => {
 
       {/* CTA Section */}
       <CTASection />
+      </main>
 
       {/* Footer */}
       <Footer />

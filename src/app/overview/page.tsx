@@ -5,6 +5,6 @@ import Overview from '@/views/Overview';
 export const runtime = 'nodejs';
 
 export default async function OverviewPage() {
-  const { user } = await requirePageSession();
+  const { user } = await requirePageSession('/overview');
   return <Overview data={await getQROverview(user.id)} />;
 }

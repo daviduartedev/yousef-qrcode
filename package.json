@@ -8,7 +8,7 @@
   },
   "scripts": {
     "test:security": "node --test tests/security.test.mjs",
-    "test:unit": "node --import tsx --test tests/qr-content.test.mjs tests/qr-analytics.test.mjs",
+    "test:unit": "node --import tsx --test tests/qr-content.test.mjs tests/qr-analytics.test.mjs tests/auth-paths.test.mjs",
     "check:secrets": "node scripts/check-secrets.mjs",
     "prepare": "node scripts/install-hooks.mjs",
     "dev": "next dev",

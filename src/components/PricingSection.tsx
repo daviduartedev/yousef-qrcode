@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { useEffect, useState, useRef } from 'react';
 import { Check } from 'lucide-react';
+import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 
 interface PricingPlan {
@@ -60,7 +61,7 @@ const pricingPlans: PricingPlan[] = [
       'White-label solutions',
       'Custom integrations',
     ],
-    buttonText: 'Contact Sales',
+    buttonText: 'Create account',
   },
 ];
 
@@ -88,7 +89,7 @@ export const PricingSection = () => {
   }, []);
 
   return (
-    <section ref={sectionRef} className="py-16 md:py-24 bg-background">
+    <section id="pricing" ref={sectionRef} className="scroll-mt-20 py-16 md:py-24 bg-background">
       <div className="container mx-auto px-4">
         {/* Header */}
         <div
@@ -156,13 +157,14 @@ export const PricingSection = () => {
 
               {/* CTA Button */}
               <Button
+                asChild
                 className={`w-full ${
                   plan.highlighted
                     ? 'bg-white text-primary hover:bg-white/90'
                     : 'bg-primary text-primary-foreground hover:bg-primary/90'
                 }`}
               >
-                {copy(plan.buttonText)}
+                <Link href="/auth?mode=signup">{copy(plan.buttonText)}</Link>
               </Button>
             </div>
           ))}

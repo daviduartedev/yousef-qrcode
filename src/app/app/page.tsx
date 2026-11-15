@@ -1,7 +1,8 @@
 import { requirePageSession } from '@/server/session';
 import Index from '@/views/Index';
+import { requestedPath } from '@/lib/auth-paths';
 export const runtime = 'nodejs';
-export default async function Workspace() {
-  await requirePageSession();
+export default async function Workspace({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  await requirePageSession(requestedPath('/app', await searchParams));
   return <Index />;
 }
