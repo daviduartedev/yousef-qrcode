@@ -58,6 +58,99 @@ const savedDesign = {
   frame: { style: "blue", text: "SCAN ME" },
 };
 
+async function createManagedCode(cookie, title, destination, tracked = true) {
+  const response = await request("/api/qr-codes", {
+    method: "POST",
+    cookie,
+    body: { title, destination_url: destination, tracking_enabled: tracked },
+  });
+  assert.equal(response.status, 201);
+  return response.json();
+}
+
+test("overview totals describe only the signed-in account", async () => {
+  const anonymous = await request("/overview");
+  assert.equal(anonymous.status, 307);
+  assert.equal(anonymous.headers.get("location"), "/auth");
+  const owner = await register();
+  const stranger = await register();
+  const other = await createManagedCode(stranger, "Private campaign from another account", "https://example.test/private");
+  const active = await createManagedCode(owner, "Active", "https://example.test/active");
+  assert.equal((await fetch(active.trackingUrl, { redirect: "manual" })).status, 302);
+  assert.equal((await fetch(other.trackingUrl, { redirect: "manual" })).status, 302);
+  await createManagedCode(owner, "Direct", "https://example.test/direct", false);
+  const paused = await createManagedCode(owner, "Paused", "https://example.test/paused");
+  assert.equal((await request(`/api/qr-codes/${paused.qrCode.id}`, {
+    cookie: owner, method: "PATCH", body: { is_active: false },
+  })).status, 200);
+  const overview = await request("/overview", { cookie: owner });
+  assert.equal(overview.status, 200);
+  const html = await overview.text();
+  assert.match(html, /Total QR Codes<\/dt><dd[^>]*>3<\/dd>/);
+  assert.match(html, /Active tracked codes<\/dt><dd[^>]*>1<\/dd>/);
+  assert.match(html, /Inactive tracked codes<\/dt><dd[^>]*>1<\/dd>/);
+  assert.match(html, /Total Scans<\/dt><dd[^>]*>1<\/dd>/);
+  assert.match(html, />Scans<\/dt><dd[^>]*>1<\/dd>/);
+  assert.doesNotMatch(html, /Private campaign from another account/);
+});
+
+test("management searches, filters and paginates the authenticated account only", async () => {
+  const owner = await register();
+  const stranger = await register();
+  await createManagedCode(stranger, "Report private", "https://example.test/report");
+  for (let number = 1; number <= 21; number++) {
+    await createManagedCode(owner, `Report ${number}`, `https://example.test/${number}`, number !== 21);
+  }
+  await createManagedCode(owner, "Literal 100%_done", "https://example.test/destination-match");
+
+  const list = async (query) => {
+    const response = await request(`/api/qr-codes?${query}`, { cookie: owner });
+    assert.equal(response.status, 200);
+    return response.json();
+  };
+  const first = await list("page=1&q=REPORT");
+  const second = await list("page=2&q=REPORT");
+  assert.equal(first.total, 21);
+  assert.equal(first.qrCodes.length, 20);
+  assert.deepEqual(second.qrCodes.map((qr) => qr.title), ["Report 1"]);
+  assert.equal(new Set([...first.qrCodes, ...second.qrCodes].map((qr) => qr.id)).size, 21);
+  assert.equal((await list("page=1&q=report&mode=tracked&status=active")).total, 20);
+  assert.equal((await list("page=1&q=report&mode=direct")).total, 1);
+  assert.equal((await list("page=1&q=destination-match")).total, 1);
+  assert.equal((await list("page=1&q=100%25_")).total, 1);
+  assert.equal((await list("page=99&q=report")).page, 2);
+});
+
+test("tracking can be paused and resumed without losing the URL or scans", async () => {
+  const owner = await register();
+  const stranger = await register();
+  const initial = await createManagedCode(owner, "Campaign", "https://example.test/campaign");
+  const direct = await createManagedCode(owner, "Direct", "https://example.test/direct", false);
+  const change = (cookie, id, is_active) => request(`/api/qr-codes/${id}`, {
+    method: "PATCH", cookie, body: { is_active },
+  });
+  const scan = () => fetch(initial.trackingUrl, { redirect: "manual" });
+  assert.equal((await scan()).status, 302);
+  assert.equal((await change(stranger, initial.qrCode.id, false)).status, 404);
+  assert.equal((await change(owner, direct.qrCode.id, false)).status, 404);
+  const pausedResponse = await change(owner, initial.qrCode.id, false);
+  assert.equal(pausedResponse.status, 200);
+  const paused = await pausedResponse.json();
+  assert.equal(paused.qrCode.is_active, false);
+  assert.equal((await scan()).status, 410);
+  const pausedList = await (await request("/api/qr-codes?page=1&status=inactive", { cookie: owner })).json();
+  assert.deepEqual(pausedList.qrCodes.map((qr) => qr.id), [initial.qrCode.id]);
+  const resumedResponse = await change(owner, initial.qrCode.id, true);
+  assert.equal(resumedResponse.status, 200);
+  const resumed = await resumedResponse.json();
+  assert.equal(resumed.qrCode.is_active, true);
+  assert.equal(resumed.trackingUrl, initial.trackingUrl);
+  assert.equal(resumed.qrCode.destination_url, initial.qrCode.destination_url);
+  assert.deepEqual(resumed.qrCode.design, initial.qrCode.design);
+  assert.equal(resumed.qrCode.total_scans, 1);
+  assert.equal((await scan()).status, 302);
+});
+
 test("a user can save and retrieve a direct QR with its full design", async () => {
   const cookie = await register();
   const created = await request("/api/qr-codes", {

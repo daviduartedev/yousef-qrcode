@@ -9,6 +9,9 @@ export function useAuth() {
     isLoading: isPending,
     isAuthenticated: Boolean(data?.user),
     error,
-    signOut: async () => { await authClient.signOut(); },
+    signOut: async () => {
+      const result = await authClient.signOut();
+      if (result.error) throw new Error('Sign-out failed.');
+    },
   };
 }

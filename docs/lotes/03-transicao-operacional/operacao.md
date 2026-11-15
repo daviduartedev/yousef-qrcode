@@ -61,9 +61,28 @@ Ensaiar com registros sintéticos representativos e observar também conteúdo/d
 
 ## Publicação e retorno
 
-Seguir #13/#15 e [acessos/decisões](acessos-e-decisoes.md). Antes de publicar: homologação separada, validação humana, código integrado, domínio HTTPS, destino de produção sem legado/fixtures, backup/observabilidade/plantão e go/no-go.
+O [#13](https://github.com/daviduartedev/yousef-qrcode/issues/13) recebeu aceite em 11/11/2026 com evidência HTTP e dispensa da rodada manual hospedada. Para preparar o [#15](https://github.com/daviduartedev/yousef-qrcode/issues/15), confirmar os alvos e responsáveis em [acessos e decisões](acessos-e-decisoes.md). A homologação usa Vercel e Neon PostgreSQL 18. A branch Neon `production` do projeto `yousef-hml` pertence à homologação.
 
-Ensaiar retorno com uma gravação criada depois do marco do exercício. Preservar design/tracking e migrations e usar build compatível. Não restaurar snapshot antigo sobre gravações novas: definir pausa/captura de escritas (inclusive scans), preservar o delta do novo ambiente, restaurar em outro alvo e reconciliar antes da promoção quando necessário. Não há delta nem retorno ao Supabase antigo.
+### Confirmar alvos e acesso
+
+1. Identificar quem tem acesso administrativo à homologação para alternar deployments e consultar logs. Confirmar com o cliente os provedores e aliases dos projetos de produção para aplicativo e PostgreSQL, separados da homologação. Identificar quem opera o deploy, o banco e o DNS, e quem decide a publicação e o retorno.
+2. Registrar a origem HTTPS definitiva e quem controla o DNS/TLS. Conferir que a origem coincide com `APP_URL` e com o endereço usado pelos novos QRs rastreáveis. Configurar `DATABASE_URL` do runtime com pool e TLS verificado e um `BETTER_AUTH_SECRET` próprio do ambiente pelo canal privado do operador.
+3. Antes de liberar tráfego, conferir migrations, permissões e ausência de legado e de fixtures no banco de produção confirmado. Usar inspeção e evidência agregada.
+
+### Ensaiar o retorno em homologação
+
+1. Selecionar o build candidato e o build que o operador conseguirá ativar no retorno. Registrar o commit e a referência privada de cada deployment. Para a primeira publicação, identificar explicitamente o artefato de retorno disponível. Verificar compatibilidade com o schema vigente, autenticação, design e tracking. Agendar a janela do ensaio com o operador.
+2. Registrar o horário do marco e as migrations aplicadas. Depois do marco, cadastrar uma conta sintética, salvar e editar o design de um QR rastreável e escaneá-lo. Guardar evidência privada da conta, do QR, do design, do modo, do destino, do evento e do contador. Conferir que o `GET /qr` redireciona com `302` sem cache e que o evento foi gravado. `HEAD /qr` serve para verificar o redirecionamento sem criar scan.
+3. Antes da troca, planejar como editor, APIs de escrita, cadastro e scans públicos serão tratados. Se a troca exigir pausa, testar o controle também em `GET /qr` e medir o impacto no redirecionamento. Acompanhar o término das requisições em andamento antes de considerar as escritas pausadas. Alternar para o build de retorno preservando a origem, o banco e as migrations.
+4. No build de retorno, entrar com a conta criada depois do marco, reabrir o QR e conferir design, modo, destino, evento e contador. Repetir uma gravação do editor e um scan para comprovar que os dois fluxos seguem gravando. Registrar o tempo de recuperação, o resultado e a referência da evidência sanitizada. Restabelecer a versão de homologação acordada e remover os dados sintéticos do exercício.
+5. Se a estratégia exigir troca de banco, ensaiar também a sequência completa com um alvo isolado. Pausar ou capturar as escritas, incluindo scans, e reconciliar o que foi gravado após o snapshot antes de apontar o aplicativo ao alvo restaurado e reabrir escritas. Conferir novamente os registros e os fluxos do passo anterior. O retorno precisa preservar as gravações já confirmadas.
+
+### Decidir e acompanhar a publicação
+
+- **Antes do go/no-go**, combinar com o operador a janela e o fuso, o plantão, o canal de alertas, a duração da observação, os limiares de falha e o tempo de recuperação aceitável. Usar como sinais a saúde da origem HTTPS, falhas de auth e de gravação no editor, erros no redirecionamento e scans que deixem de persistir. Vincular a evidência do ensaio ao build validado.
+- **Recuperação hospedada.** O [#12](https://github.com/daviduartedev/yousef-qrcode/issues/12) segue aberto com backup e restauração hospedados adiados. Registrar com o operador como a recuperação de produção será tratada antes de decidir a publicação, incluindo guarda, retenção e restauração. Um ensaio bem-sucedido de troca de build cobre o retorno do aplicativo com o banco preservado.
+- **Go/no-go.** Conferir G4, código integrado, revisão, checks e validação humana aplicáveis, alvos confirmados e retorno ensaiado. Falha em cadastro/login, isolamento, persistência, redirecionamento ou registro de scans exige investigação antes de liberar. Publicar somente após decisão explícita de publicar.
+- **Após a publicação**, conferir na origem final novas contas, isolamento, salvar/reabrir, exportação PNG/SVG, leitura de QR novo e registro de eventos. Acompanhar os sinais no período combinado, acionar o retorno conforme os critérios acordados e registrar o resultado e o aceite de G5.
 
 O procedimento não automatiza DNS, deploy, agendamento de backups, retenção, reconciliação de dados pós-snapshot ou desligamento da origem antiga. Esses itens continuam gates operacionais, não efeitos implícitos dos comandos.
 

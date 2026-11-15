@@ -48,8 +48,11 @@ export function getQRCodeAnalytics(shortCode: string) {
     "/api/qr-codes/" + encodeURIComponent(shortCode) + "/analytics",
   );
 }
-export async function getAllQRCodes() {
-  return (await api<{ qrCodes: QRCodeRecord[] }>("/api/qr-codes")).qrCodes;
+export function setQRCodeActive(id: string, active: boolean) {
+  return api<SavedQRCode>("/api/qr-codes/" + encodeURIComponent(id), {
+    method: "PATCH",
+    body: JSON.stringify({ is_active: active }),
+  });
 }
 export function deleteQRCode(id: string) {
   return api<{ deleted: boolean }>("/api/qr-codes/" + encodeURIComponent(id), {

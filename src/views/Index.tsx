@@ -1,6 +1,6 @@
 'use client';
 
-import Header from "@/components/Header";
+import { WorkspaceShell } from "@/components/WorkspaceShell";
 import LogoCarousel from "@/components/LogoCarousel";
 import QRGenerator from "@/components/QRGenerator";
 import TrackingInfo from "@/components/TrackingInfo";
@@ -18,9 +18,7 @@ const Index = () => {
   const { t } = useTranslation();
 
   return (
-    <div className="min-h-screen">
-      <Header />
-
+    <WorkspaceShell>
       {/* Hero Section */}
       <section id="qr-generator" className="py-12 px-6 bg-hero">
         <div className="max-w-7xl mx-auto text-center mb-12">
@@ -82,7 +80,7 @@ const Index = () => {
 
       {/* Analytics Integration */}
       <AnalyticsIntegration />
-    </div>
+    </WorkspaceShell>
   );
 };
 

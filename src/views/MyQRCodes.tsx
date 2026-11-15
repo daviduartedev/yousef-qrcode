@@ -1,7 +1,9 @@
 "use client";
 import { useTranslation } from "react-i18next";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useTransition } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEditorNavigation } from "@/components/EditorNavigation";
 import type { QRCodeRecord } from "@/lib/qr-types";
 import { downloadQR } from "@/lib/qr-export";
@@ -9,14 +11,10 @@ import dynamic from "next/dynamic";
 const QRCodeStyled = dynamic(() => import("@/components/QRCodePreview"), {
   ssr: false,
 });
-import {
-  getAllQRCodes,
-  getQRCodeAnalytics,
-  deleteQRCode,
-  getTrackingUrl,
-} from "@/lib/qrTracking";
-import { useAuth } from "@/hooks/useAuth";
-import Header from "@/components/Header";
+import { getQRCodeAnalytics, deleteQRCode, setQRCodeActive } from "@/lib/qrTracking";
+import { qrListHref, type QRListQuery } from "@/lib/qr-list";
+import { WorkspaceShell } from "@/components/WorkspaceShell";
+import { QRListFilters } from "@/components/QRListFilters";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -37,6 +35,8 @@ import {
   Copy,
   Download,
   Pencil,
+  Pause,
+  Play,
 } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { useToast } from "@/hooks/use-toast";
@@ -106,95 +106,89 @@ function SavedQRThumbnail({ qr, data }: { qr: QRCodeRecord; data: string }) {
   );
 }
 
-const MyQRCodes = () => {
+const MyQRCodes = ({ query, result, origin }: {
+  query: QRListQuery;
+  result: { qrCodes: QRCodeRecord[]; total: number; page: number; pages: number };
+  origin: string;
+}) => {
   const { t: copy, i18n } = useTranslation("copy");
-  const { user } = useAuth();
   const { navigate } = useEditorNavigation();
+  const router = useRouter();
   const { toast } = useToast();
-  const [qrCodes, setQrCodes] = useState<QRCodeRecord[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const { qrCodes, total, page, pages } = result;
+  const filtered = Boolean(query.q || query.mode || query.status);
+  const [pendingAction, setPendingAction] = useState(false);
+  const [refreshing, startRefresh] = useTransition();
+  const busy = pendingAction || refreshing;
   const [expandedQR, setExpandedQR] = useState<string | null>(null);
-  const [analyticsMap, setAnalyticsMap] = useState<Record<string, Analytics>>(
-    {},
-  );
-  const [loadingAnalytics, setLoadingAnalytics] = useState<string | null>(null);
+  const [detail, setDetail] = useState<{
+    shortCode: string;
+    scans: number;
+    analytics: Analytics | null;
+  } | null>(null);
+  const expanded = qrCodes.find(qr => qr.id === expandedQR && qr.tracking_enabled);
+  const shortCode = expanded?.short_code;
+  const scans = expanded?.total_scans;
+  const currentDetail = detail?.shortCode === shortCode && detail?.scans === scans ? detail : null;
 
-  const userId = user?.id;
   useEffect(() => {
+    if (!shortCode || scans === undefined) return;
     let cancelled = false;
-    if (!userId) {
-      setIsLoading(false);
-      return;
-    }
-    setIsLoading(true);
-    getAllQRCodes()
-      .then((data) => {
-        if (!cancelled) setQrCodes(data);
-      })
-      .catch(() => {
-        if (!cancelled)
-          toast({
-            title: copy("Não foi possível carregar os QR Codes"),
-            variant: "destructive",
-          });
-      })
-      .finally(() => {
-        if (!cancelled) setIsLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [userId, toast, copy]);
+    void getQRCodeAnalytics(shortCode).then(result => {
+      if (!cancelled) setDetail({ shortCode, scans, analytics: result.analytics });
+    }).catch(() => {
+      if (cancelled) return;
+      setDetail({ shortCode, scans, analytics: null });
+      toast({ title: copy("Não foi possível carregar as estatísticas"), variant: "destructive" });
+    });
+    return () => { cancelled = true; };
+  }, [shortCode, scans, copy, toast]);
 
-  const fetchAnalyticsForQR = async (qrCodeId: string) => {
-    if (analyticsMap[qrCodeId]) return;
-    const qr = qrCodes.find((item) => item.id === qrCodeId);
-    if (!qr) return;
-    setLoadingAnalytics(qrCodeId);
+  function handleExpand(id: string, open: boolean) {
+    setDetail(null);
+    setExpandedQR(open ? id : null);
+  }
+
+  async function runAction(action: () => Promise<unknown>, success: string, error: string) {
+    setPendingAction(true);
     try {
-      const result = await getQRCodeAnalytics(qr.short_code);
-      setAnalyticsMap((previous) => ({
-        ...previous,
-        [qrCodeId]: result.analytics,
-      }));
+      await action();
+      startRefresh(() => router.refresh());
+      toast({ title: copy(success) });
     } catch {
-      toast({
-        title: copy("Não foi possível carregar as estatísticas"),
-        variant: "destructive",
-      });
+      toast({ title: copy(error), variant: "destructive" });
     } finally {
-      setLoadingAnalytics(null);
+      setPendingAction(false);
     }
-  };
+  }
 
-  const handleExpand = (qrCodeId: string) => {
-    const newExpanded = expandedQR === qrCodeId ? null : qrCodeId;
-    setExpandedQR(newExpanded);
-    if (newExpanded) {
-      fetchAnalyticsForQR(qrCodeId);
-    }
-  };
+  function handleDelete(qr: QRCodeRecord) {
+    const message = qr.tracking_enabled
+      ? "Delete this tracked QR Code? Its public link will stop redirecting and its scan history will be deleted."
+      : "Delete this direct QR Code? Copies already shared will still open their original destination.";
+    if (!window.confirm(copy(message))) return;
+    void runAction(() => deleteQRCode(qr.id), "QR Code deleted successfully", "Error deleting QR Code");
+  }
 
-  const handleDelete = async (qrCodeId: string) => {
-    if (!confirm(copy("Are you sure you want to delete this QR Code?"))) return;
-
-    try {
-      await deleteQRCode(qrCodeId);
-      setQrCodes((prev) => prev.filter((qr) => qr.id !== qrCodeId));
-      toast({ title: copy("QR Code deleted successfully") });
-    } catch (error) {
-      console.error("Error deleting QR code:", error);
-      toast({ title: copy("Error deleting QR Code"), variant: "destructive" });
-    }
-  };
+  function handleTracking(qr: QRCodeRecord) {
+    void runAction(
+      () => setQRCodeActive(qr.id, !qr.is_active),
+      qr.is_active ? "QR Code paused" : "QR Code reactivated",
+      "Could not change tracking status. Try again.",
+    );
+  }
 
   const getQRUrl = (qr: QRCodeRecord) =>
-    qr.tracking_enabled ? getTrackingUrl(qr.short_code) : qr.destination_url;
+    qr.tracking_enabled ? `${origin}/qr?code=${encodeURIComponent(qr.short_code)}` : qr.destination_url;
 
-  const copyToClipboard = (qr: QRCodeRecord) => {
-    navigator.clipboard.writeText(getQRUrl(qr));
-    toast({ title: copy("Link copied to clipboard!") });
-  };
+  async function copyToClipboard(qr: QRCodeRecord) {
+    try {
+      await navigator.clipboard.writeText(getQRUrl(qr));
+      toast({ title: copy("Link copied to clipboard!") });
+    } catch {
+      toast({ title: copy("Could not copy the link. Try again."), variant: "destructive" });
+    }
+  }
 
   const downloadCode = async (qr: QRCodeRecord, format: "png" | "svg") => {
     try {
@@ -310,132 +304,95 @@ const MyQRCodes = () => {
     );
   };
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-background">
-        <Header />
-        <div className="flex items-center justify-center py-20">
-          <Loader2 className="w-8 h-8 animate-spin text-primary" />
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="min-h-screen bg-background">
-      <Header />
-
-      <main className="max-w-6xl mx-auto px-6 py-8">
-        <div className="flex items-center justify-between mb-8">
+    <WorkspaceShell>
+      <main className="space-y-5 px-4 py-6 sm:px-8 sm:py-8">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-3xl font-bold">{copy("My QR Codes")}</h1>
             <p className="text-muted-foreground mt-1">
               {copy("Manage and view analytics for your QR Codes")}
             </p>
           </div>
-          <Button onClick={() => navigate("/app")}>
-            <Plus className="w-4 h-4 mr-2" />
+          <Button className="min-h-11 gap-2 bg-blue-700 text-white hover:bg-blue-800" onClick={() => navigate("/app")}>
+            <Plus className="size-4" aria-hidden="true" />
             {copy("Create New QR Code")}
           </Button>
         </div>
 
+        <QRListFilters key={qrListHref({ ...query, page: 1 })} query={query} />
+        <p aria-live="polite" className="text-sm text-muted-foreground">
+          {copy("QR Codes found: {{total}}", { total: new Intl.NumberFormat(i18n.resolvedLanguage).format(total) })}
+        </p>
+
         {qrCodes.length === 0 ? (
-          <Card className="p-12 text-center">
+          <Card className="p-6 text-center sm:p-12">
             <QrCode className="w-16 h-16 mx-auto text-muted-foreground mb-4" />
             <h2 className="text-xl font-semibold mb-2">
-              {copy("No QR Codes saved")}
+              {copy(filtered ? "No matching QR Codes" : "No QR Codes saved")}
             </h2>
             <p className="text-muted-foreground mb-6">
-              {copy(
-                "Create your first QR Code with tracking to see analytics here.",
-              )}
+              {copy(filtered ? "Change your search or clear the filters." : "Your saved codes will appear here.")}
             </p>
-            <Button onClick={() => navigate("/app")}>
-              <Plus className="w-4 h-4 mr-2" />
-              {copy("Create QR Code")}
-            </Button>
+            <Button asChild className="min-h-11"><Link href={filtered ? "/my-qrcodes" : "/app"}>
+              {copy(filtered ? "Clear filters" : "Create QR Code")}
+            </Link></Button>
           </Card>
         ) : (
           <div className="space-y-4">
-            {qrCodes.map((qr) => (
+            {qrCodes.map((qr) => {
+              const analytics = expanded?.id === qr.id ? currentDetail?.analytics : null;
+              return (
               <Card key={qr.id} className="overflow-hidden">
                 <Collapsible
                   open={expandedQR === qr.id}
-                  onOpenChange={() => handleExpand(qr.id)}
+                  onOpenChange={(open) => handleExpand(qr.id, open)}
                 >
-                  <CollapsibleTrigger asChild>
-                    <div className="p-4 cursor-pointer hover:bg-muted/50 transition-colors">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex items-start gap-4 min-w-0 flex-1">
-                          <SavedQRThumbnail qr={qr} data={getQRUrl(qr)} />
-                          <div className="min-w-0 flex-1">
-                            <h3 className="font-semibold break-words">
-                              {qr.title || qr.destination_url}
-                            </h3>
-                            <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground mt-1">
-                              <span className="flex items-center gap-1">
-                                <Eye className="w-3 h-3 shrink-0" />
-                                {qr.total_scans || 0} {copy("scans")}
-                              </span>
-                              <span className="flex items-center gap-1">
-                                <Calendar className="w-3 h-3 shrink-0" />
-                                {new Date(qr.created_at).toLocaleDateString(
-                                  i18n.language === "ar" ? "ar" : "en",
-                                )}
-                              </span>
-                              <span className="font-mono text-xs bg-muted px-2 py-0.5 rounded">
-                                {qr.short_code}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-1 shrink-0">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            title={copy("Edit design")}
-                            aria-label={copy("Edit design")}
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              navigate(
-                                "/app?edit=" + encodeURIComponent(qr.id),
-                              );
-                            }}
-                          >
-                            <Pencil className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              window.open(qr.destination_url, "_blank");
-                            }}
-                            title={copy("Open destination")}
-                          >
-                            <ExternalLink className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDelete(qr.id);
-                            }}
-                            className="text-destructive hover:text-destructive"
-                            title={copy("Delete")}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                          <ChevronDown
-                            className={`w-5 h-5 text-muted-foreground transition-transform ${
-                              expandedQR === qr.id ? "rotate-180" : ""
-                            }`}
-                          />
+                  <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                    <div className="flex min-w-0 basis-full items-center gap-3 sm:flex-1">
+                      <SavedQRThumbnail qr={qr} data={getQRUrl(qr)} />
+                      <div className="min-w-0">
+                        <h3 className="break-words font-semibold">{qr.title || qr.destination_url}</h3>
+                        <p dir="ltr" className="truncate text-start text-sm text-muted-foreground" title={qr.destination_url}>{qr.destination_url}</p>
+                        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                          <span className="rounded bg-muted px-2 py-1 font-medium">{copy(qr.tracking_enabled ? "Tracked" : "Direct")}</span>
+                          {qr.tracking_enabled && <span className={qr.is_active
+                            ? "rounded bg-emerald-100 px-2 py-1 font-medium text-emerald-900 dark:bg-emerald-950 dark:text-emerald-100"
+                            : "rounded bg-muted px-2 py-1 font-medium"}>
+                            {copy(qr.is_active ? "Active" : "Inactive")}
+                          </span>}
+                          <span className="flex items-center gap-1"><Eye className="size-3" aria-hidden="true" />{qr.total_scans} {copy("scans")}</span>
+                          <span className="flex items-center gap-1"><Calendar className="size-3" aria-hidden="true" />
+                            {new Date(qr.created_at).toLocaleDateString(i18n.resolvedLanguage, { timeZone: "UTC" })}
+                          </span>
                         </div>
                       </div>
                     </div>
-                  </CollapsibleTrigger>
+                    <div className="flex flex-wrap items-center gap-1">
+                      <Button variant="ghost" size="icon" className="size-11" title={copy("Edit design")} aria-label={copy("Edit design")}
+                        onClick={() => navigate("/app?edit=" + encodeURIComponent(qr.id))}>
+                        <Pencil className="size-4" aria-hidden="true" />
+                      </Button>
+                      <Button asChild variant="ghost" size="icon" className="size-11">
+                        <a href={qr.destination_url} target="_blank" rel="noopener noreferrer" title={copy("Open destination")} aria-label={copy("Open destination")}>
+                          <ExternalLink className="size-4" aria-hidden="true" />
+                        </a>
+                      </Button>
+                      {qr.tracking_enabled && <Button variant="outline" className="min-h-11 gap-2" disabled={busy} onClick={() => handleTracking(qr)}>
+                        {qr.is_active ? <Pause className="size-4" aria-hidden="true" /> : <Play className="size-4" aria-hidden="true" />}
+                        {copy(qr.is_active ? "Pause tracking" : "Reactivate tracking")}
+                      </Button>}
+                      <Button variant="ghost" size="icon" className="size-11 text-destructive hover:text-destructive" disabled={busy}
+                        title={copy("Delete")} aria-label={copy("Delete")} onClick={() => handleDelete(qr)}>
+                        <Trash2 className="size-4" aria-hidden="true" />
+                      </Button>
+                      <CollapsibleTrigger asChild>
+                        <Button type="button" variant="ghost" size="icon" className="size-11" title={copy("QR details")} aria-label={copy("QR details")}>
+                          <ChevronDown className={`size-4 transition-transform ${expandedQR === qr.id ? "rotate-180" : ""}`} aria-hidden="true" />
+                        </Button>
+                      </CollapsibleTrigger>
+                    </div>
+                  </div>
 
                   <CollapsibleContent>
                     <div className="border-t border-border p-6 bg-muted/30">
@@ -503,17 +460,17 @@ const MyQRCodes = () => {
                         </div>
                       </div>
 
-                      {loadingAnalytics === qr.id ? (
+                      {expanded?.id === qr.id && !currentDetail ? (
                         <div className="flex items-center justify-center py-12">
                           <Loader2 className="w-6 h-6 animate-spin text-primary" />
                         </div>
-                      ) : analyticsMap[qr.id] ? (
+                      ) : analytics ? (
                         <>
                           {/* Stats Summary */}
                           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
                             <div className="bg-card rounded-lg p-4 text-center shadow-sm">
                               <p className="text-3xl font-bold text-primary">
-                                {analyticsMap[qr.id].totalScans}
+                                {analytics.totalScans}
                               </p>
                               <p className="text-sm text-muted-foreground">
                                 {copy("Total Scans")}
@@ -523,7 +480,7 @@ const MyQRCodes = () => {
                               <p className="text-3xl font-bold text-primary">
                                 {
                                   Object.keys(
-                                    analyticsMap[qr.id].deviceBreakdown,
+                                    analytics.deviceBreakdown,
                                   ).length
                                 }
                               </p>
@@ -534,7 +491,7 @@ const MyQRCodes = () => {
                             <div className="bg-card rounded-lg p-4 text-center shadow-sm">
                               <p className="text-3xl font-bold text-primary">
                                 {
-                                  Object.keys(analyticsMap[qr.id].osBreakdown)
+                                  Object.keys(analytics.osBreakdown)
                                     .length
                                 }
                               </p>
@@ -546,7 +503,7 @@ const MyQRCodes = () => {
                               <p className="text-3xl font-bold text-primary">
                                 {
                                   Object.keys(
-                                    analyticsMap[qr.id].countryBreakdown,
+                                    analytics.countryBreakdown,
                                   ).length
                                 }
                               </p>
@@ -556,7 +513,7 @@ const MyQRCodes = () => {
                             </div>
                           </div>
 
-                          {analyticsMap[qr.id].totalScans === 0 ? (
+                          {analytics.totalScans === 0 ? (
                             <div className="text-center py-8">
                               <BarChart3 className="w-12 h-12 mx-auto text-muted-foreground mb-3" />
                               <p className="text-muted-foreground">
@@ -570,8 +527,8 @@ const MyQRCodes = () => {
                               <div className="bg-card rounded-lg p-4 shadow-sm">
                                 <DonutChart
                                   data={convertToChartData(
-                                    analyticsMap[qr.id].osBreakdown,
-                                    analyticsMap[qr.id].totalScans,
+                                    analytics.osBreakdown,
+                                    analytics.totalScans,
                                   )}
                                   title={copy("Operating System")}
                                 />
@@ -579,8 +536,8 @@ const MyQRCodes = () => {
                               <div className="bg-card rounded-lg p-4 shadow-sm">
                                 <DonutChart
                                   data={convertToChartData(
-                                    analyticsMap[qr.id].deviceBreakdown,
-                                    analyticsMap[qr.id].totalScans,
+                                    analytics.deviceBreakdown,
+                                    analytics.totalScans,
                                   )}
                                   title={copy("Device")}
                                 />
@@ -588,8 +545,8 @@ const MyQRCodes = () => {
                               <div className="bg-card rounded-lg p-4 shadow-sm">
                                 <DonutChart
                                   data={convertToChartData(
-                                    analyticsMap[qr.id].browserBreakdown,
-                                    analyticsMap[qr.id].totalScans,
+                                    analytics.browserBreakdown,
+                                    analytics.totalScans,
                                   )}
                                   title={copy("Browser")}
                                 />
@@ -597,8 +554,8 @@ const MyQRCodes = () => {
                               <div className="bg-card rounded-lg p-4 shadow-sm">
                                 <DonutChart
                                   data={convertToChartData(
-                                    analyticsMap[qr.id].countryBreakdown,
-                                    analyticsMap[qr.id].totalScans,
+                                    analytics.countryBreakdown,
+                                    analytics.totalScans,
                                   )}
                                   title={copy("Country")}
                                 />
@@ -611,11 +568,19 @@ const MyQRCodes = () => {
                   </CollapsibleContent>
                 </Collapsible>
               </Card>
-            ))}
+              );
+            })}
           </div>
         )}
+        {pages > 1 && <nav aria-label={copy("QR Code pages")} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-card p-3">
+          {page > 1 ? <Button asChild variant="outline" className="min-h-11"><Link href={qrListHref({ ...query, page: page - 1 })}>{copy("Previous page")}</Link></Button>
+            : <Button variant="outline" className="min-h-11" disabled>{copy("Previous page")}</Button>}
+          <span className="text-sm text-muted-foreground">{copy("Page {{page}} of {{pages}}", { page, pages })}</span>
+          {page < pages ? <Button asChild variant="outline" className="min-h-11"><Link href={qrListHref({ ...query, page: page + 1 })}>{copy("Next page")}</Link></Button>
+            : <Button variant="outline" className="min-h-11" disabled>{copy("Next page")}</Button>}
+        </nav>}
       </main>
-    </div>
+    </WorkspaceShell>
   );
 };
 
