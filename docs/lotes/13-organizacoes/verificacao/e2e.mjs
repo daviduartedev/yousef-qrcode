@@ -30,7 +30,7 @@ const shot = name => page.screenshot({ path: `${out}/${name}.png`, animations: '
 // Existing personal content stays where it was.
 await owner.context.request.post(base + '/api/qr-codes', { headers: { origin: base }, data: { title: 'Personal flyer', destination_url: 'https://example.test/me' } });
 await page.goto(base + '/overview');
-const switcher = page.getByLabel('Workspace');
+const switcher = page.getByLabel('Workspace').first();
 check('switcher starts in the personal workspace', await visible(switcher) && (await switcher.locator('option:checked').innerText()).startsWith('Personal workspace'));
 await page.getByRole('link', { name: 'Organization' }).click();
 await page.waitForURL(/\/settings\/organization$/);
@@ -60,7 +60,7 @@ check('member sees the invitation', await visible(member.page.getByRole('heading
 await member.page.screenshot({ path: `${out}/03-aceitar-convite.png` });
 await member.page.getByRole('button', { name: 'Accept invitation' }).click();
 await member.page.waitForURL(/\/overview$/);
-check('member lands in the organization', (await member.page.getByLabel('Workspace').locator('option:checked').innerText()).startsWith('Acme Marketing'));
+check('member lands in the organization', (await member.page.getByLabel('Workspace').first().locator('option:checked').innerText()).startsWith('Acme Marketing'));
 await member.page.goto(base + '/my-qrcodes');
 check('member sees organization content', await visible(member.page.getByText('Org poster')));
 const blocked = await member.context.request.post(base + '/api/qr-codes', { headers: { origin: base }, data: { title: 'x', destination_url: 'https://example.test/' } });

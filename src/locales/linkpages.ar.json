@@ -139,5 +139,7 @@
   "Unable to complete this request": "تعذّر إكمال هذا الطلب",
   "The address is fixed after the first publication or QR code so shared links and printed QR codes keep working.": "يُثبَّت العنوان بعد أول نشر أو بعد إنشاء رمز QR حتى تظل الروابط المشتركة ورموز QR المطبوعة تعمل.",
   "You can change the address until you publish or create a QR code.": "يمكنك تغيير العنوان حتى تنشر الصفحة أو تنشئ رمز QR.",
-  "The address cannot change after the page was published or got a QR code": "لا يمكن تغيير العنوان بعد نشر الصفحة أو إنشاء رمز QR لها"
+  "The address cannot change after the page was published or got a QR code": "لا يمكن تغيير العنوان بعد نشر الصفحة أو إنشاء رمز QR لها",
+  "Confirm your email address before accepting the invitation": "أكّد بريدك الإلكتروني قبل قبول الدعوة",
+  "The workspace changed in another tab. Reload the page.": "تغيّرت مساحة العمل في علامة تبويب أخرى. أعد تحميل الصفحة."
 }

@@ -47,6 +47,7 @@ import {
 } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { useToast } from "@/hooks/use-toast";
+import { workspaceHeaders } from "@/lib/workspace-client";
 
 // Chart colors
 const CHART_COLORS = {
@@ -208,7 +209,7 @@ const MyQRCodes = ({ query, result, origin, organization }: {
   function organize(qr: QRCodeRecord, body: { folderId: string | null } | { watched: boolean } | { labelId: string; labeled: boolean }) {
     void runAction(async () => {
       const response = await fetch(`/api/qr-codes/${qr.id}/organization`, {
-        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+        method: 'PATCH', headers: { 'Content-Type': 'application/json', ...workspaceHeaders() }, body: JSON.stringify(body),
       });
       if (!response.ok) throw new Error();
     }, 'Changes saved.', 'Could not save changes. Try again.');

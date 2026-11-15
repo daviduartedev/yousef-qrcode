@@ -13,7 +13,7 @@ export async function POST(request: Request) {
     const user = await requireApiUser(request);
     const body = z.object({ token: z.string().max(100) }).strict().safeParse(await readJson(request));
     if (!body.success) throw new HttpError(400, 'This invitation is invalid or expired');
-    const result = await acceptInvitation(user.id, user.email, body.data.token);
+    const result = await acceptInvitation(user.id, user.email, body.data.token, user.emailVerified);
     const secure = getServerEnv().appUrl.startsWith('https:') ? '; Secure' : '';
     return Response.json(result, { headers: { ...privateHeaders, 'Set-Cookie': `${workspaceCookie}=${result.workspace_id}; Path=/; HttpOnly; SameSite=Lax; Max-Age=31536000${secure}` } });
   } catch (error) { return apiError(error); }

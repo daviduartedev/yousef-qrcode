@@ -11,7 +11,7 @@ export const metadata: Metadata = { title: 'Edit Linkpage', robots: { index: fal
 
 export default async function LinkpageEditorPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { workspace } = await requirePageWorkspace(`/linkpages/${encodeURIComponent(id)}`);
+  const { workspace } = await requirePageWorkspace(`/linkpages/${encodeURIComponent(id)}`, 'write');
   const page = await getLinkpage(workspace.id, id).catch(error => { if (error instanceof HttpError && error.status === 404) return null; throw error; });
   if (!page) notFound();
   return <LinkpageEditor initial={page} origin={getServerEnv().appUrl} />;

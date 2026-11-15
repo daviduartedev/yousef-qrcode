@@ -68,5 +68,7 @@
   "you": "أنت",
   "This organization's content": "محتوى هذه المؤسسة",
   "Members of this organization share its QR codes, pages, cards, forms and files according to their role.": "يتشارك أعضاء هذه المؤسسة رموز QR والصفحات والبطاقات والنماذج والملفات حسب أدوارهم.",
-  "This is your personal workspace. Create an organization to work with other people.": "هذه مساحة عملك الشخصية. أنشئ مؤسسة للعمل مع أشخاص آخرين."
+  "This is your personal workspace. Create an organization to work with other people.": "هذه مساحة عملك الشخصية. أنشئ مؤسسة للعمل مع أشخاص آخرين.",
+  "Confirm your email address before accepting the invitation": "أكّد بريدك الإلكتروني قبل قبول الدعوة",
+  "The workspace changed in another tab. Reload the page.": "تغيّرت مساحة العمل في علامة تبويب أخرى. أعد تحميل الصفحة."
 }

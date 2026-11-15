@@ -54,11 +54,7 @@ ALTER TABLE "qrconnect"."workspace_invitations" ADD CONSTRAINT "workspace_invita
 ALTER TABLE "qrconnect"."workspace_members" ADD CONSTRAINT "workspace_members_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "qrconnect"."workspaces"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "qrconnect"."workspace_members" ADD CONSTRAINT "workspace_members_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "qrconnect"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "qrconnect"."workspaces" ADD CONSTRAINT "workspaces_created_by_user_id_fk" FOREIGN KEY ("created_by") REFERENCES "qrconnect"."user"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
--- Every existing account becomes the owner of a personal workspace with the same id, so all content keeps its owner.
-INSERT INTO "qrconnect"."workspaces" ("id", "name", "kind", "created_by", "created_at")
-  SELECT "id", left("name", 80), 'personal', "id", "created_at" FROM "qrconnect"."user" ON CONFLICT DO NOTHING;--> statement-breakpoint
-INSERT INTO "qrconnect"."workspace_members" ("workspace_id", "user_id", "role", "created_at")
-  SELECT "id", "id", 'owner', "created_at" FROM "qrconnect"."user" ON CONFLICT DO NOTHING;--> statement-breakpoint
+-- The trigger exists before the backfill, so no account created during the migration is missed.
 -- New accounts get their personal workspace in the same transaction, whatever code version creates them.
 CREATE OR REPLACE FUNCTION "qrconnect"."create_personal_workspace"() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
@@ -67,10 +63,24 @@ BEGIN
   RETURN NEW;
 END $$;--> statement-breakpoint
 CREATE TRIGGER "user_personal_workspace" AFTER INSERT ON "qrconnect"."user" FOR EACH ROW EXECUTE FUNCTION "qrconnect"."create_personal_workspace"();--> statement-breakpoint
+-- Every existing account becomes the owner of a personal workspace with the same id, so all content keeps its owner.
+INSERT INTO "qrconnect"."workspaces" ("id", "name", "kind", "created_by", "created_at")
+  SELECT "id", left("name", 80), 'personal', "id", "created_at" FROM "qrconnect"."user" ON CONFLICT DO NOTHING;--> statement-breakpoint
+INSERT INTO "qrconnect"."workspace_members" ("workspace_id", "user_id", "role", "created_at")
+  SELECT "id", "id", 'owner', "created_at" FROM "qrconnect"."user" ON CONFLICT DO NOTHING;--> statement-breakpoint
 -- Deleting an account deletes its personal content, as before; organizations keep theirs.
 CREATE OR REPLACE FUNCTION "qrconnect"."delete_personal_workspace"() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
   DELETE FROM "qrconnect"."workspaces" WHERE "id" = OLD."id" AND "kind" = 'personal';
+  -- An organization never stays without an owner: the longest-standing member takes over, or an empty organization is removed.
+  UPDATE "qrconnect"."workspace_members" m SET "role" = 'owner'
+    FROM (SELECT DISTINCT ON (w."id") w."id" AS workspace_id, mm."user_id"
+      FROM "qrconnect"."workspaces" w JOIN "qrconnect"."workspace_members" mm ON mm."workspace_id" = w."id"
+      WHERE w."kind" = 'organization' AND NOT EXISTS (SELECT 1 FROM "qrconnect"."workspace_members" o WHERE o."workspace_id" = w."id" AND o."role" = 'owner')
+      ORDER BY w."id", mm."created_at", mm."user_id") heir
+    WHERE m."workspace_id" = heir.workspace_id AND m."user_id" = heir."user_id";
+  DELETE FROM "qrconnect"."workspaces" w WHERE w."kind" = 'organization'
+    AND NOT EXISTS (SELECT 1 FROM "qrconnect"."workspace_members" m WHERE m."workspace_id" = w."id");
   RETURN OLD;
 END $$;--> statement-breakpoint
 CREATE TRIGGER "user_delete_personal_workspace" AFTER DELETE ON "qrconnect"."user" FOR EACH ROW EXECUTE FUNCTION "qrconnect"."delete_personal_workspace"();--> statement-breakpoint

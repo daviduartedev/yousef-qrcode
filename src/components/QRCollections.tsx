@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { qrControl, type QROrganization } from '@/components/QRListFilters';
 import { qrListHref, type QRListQuery } from '@/lib/qr-list';
 import type { QRCodeRecord } from '@/lib/qr-types';
+import { workspaceHeaders } from '@/lib/workspace-client';
 
 type Kind = 'folder' | 'label';
 
@@ -39,7 +40,7 @@ export function QRCollections({ query, organization, onChanged }: {
     try {
       const response = await fetch('/api/qr-codes/organization', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...workspaceHeaders() },
         body: JSON.stringify({ action, collection: kind, id, ...(action === 'delete' ? {} : { name }) }),
       });
       if (response.status === 409) {

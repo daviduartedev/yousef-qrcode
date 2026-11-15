@@ -162,5 +162,7 @@
   "Send my contact": "إرسال بياناتي",
   "Published. Your card is live.": "تم النشر. بطاقتك متاحة الآن.",
   "{{views}} views · {{saves}} saves in 30 days · {{contacts}} contacts": "{{views}} مشاهدة · {{saves}} حفظ خلال 30 يومًا · {{contacts}} جهة اتصال",
-  "(email or phone required)": "(البريد أو الهاتف مطلوب)"
+  "(email or phone required)": "(البريد أو الهاتف مطلوب)",
+  "Confirm your email address before accepting the invitation": "أكّد بريدك الإلكتروني قبل قبول الدعوة",
+  "The workspace changed in another tab. Reload the page.": "تغيّرت مساحة العمل في علامة تبويب أخرى. أعد تحميل الصفحة."
 }

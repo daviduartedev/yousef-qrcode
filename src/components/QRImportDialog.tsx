@@ -13,6 +13,7 @@ import {
   type QRImportRow,
 } from "@/lib/qr-import";
 import { qrImportCopy } from "@/locales/qr-import";
+import { workspaceHeaders } from "@/lib/workspace-client";
 
 type Draft = { file: File; importId: string; rows: QRImportRow[] };
 type FileIssue = QRImportFileIssue | "file_too_large" | "invalid_encoding" | "unreadable";
@@ -98,7 +99,7 @@ export function QRImportDialog({ onImported }: { onImported: () => void }) {
     try {
       const response = await fetch("/api/qr-codes/import", {
         method: "POST",
-        headers: { "Content-Type": "text/csv;charset=UTF-8", "X-QR-Import-Id": draft.importId },
+        headers: { "Content-Type": "text/csv;charset=UTF-8", "X-QR-Import-Id": draft.importId, ...workspaceHeaders() },
         body: draft.file,
       });
       if (!response.ok) throw new Error("Import response was unsuccessful");

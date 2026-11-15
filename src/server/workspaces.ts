@@ -6,7 +6,8 @@ import { getDb } from '@/server/db';
 import { user, workspaceInvitations, workspaceMembers, workspaces } from '@/server/db/schema';
 import { HttpError } from '@/server/http';
 import { getServerEnv } from '@/server/env';
-import { sendAccountEmail } from '@/server/email';
+import { after } from 'next/server';
+import { emailDeliveryAvailable, sendAccountEmail } from '@/server/email';
 import {
   can, canAssign, workspaceLimits, workspaceRoles,
   type WorkspaceInvitation, type WorkspaceMember, type WorkspacePermission, type WorkspaceRole, type WorkspaceSummary,
@@ -90,8 +91,20 @@ export async function deleteOrganization(workspace: ActiveWorkspace, input: unkn
   assertPermission(workspace, 'own');
   const parsed = z.object({ confirm_name: z.string() }).strict().safeParse(input);
   if (!parsed.success || parsed.data.confirm_name.trim() !== workspace.name) throw new HttpError(400, 'Type the organization name to confirm');
-  await getDb().delete(workspaces).where(and(eq(workspaces.id, workspace.id), eq(workspaces.kind, 'organization')));
-  return { deleted: true };
+  return getDb().transaction(async tx => {
+    await lockWorkspace(tx, workspace.id);
+    if (await freshRole(tx, workspace) !== 'owner') throw new HttpError(403, 'Your role does not allow this action');
+    await tx.delete(workspaces).where(and(eq(workspaces.id, workspace.id), eq(workspaces.kind, 'organization')));
+    return { deleted: true };
+  });
+}
+
+/** The actor's role read inside the workspace lock, so a member demoted a moment ago cannot act with the old role. */
+async function freshRole(tx: Tx, workspace: ActiveWorkspace) {
+  const [row] = await tx.select({ role: workspaceMembers.role }).from(workspaceMembers)
+    .where(and(eq(workspaceMembers.workspaceId, workspace.id), eq(workspaceMembers.userId, workspace.userId)));
+  if (!row) throw new HttpError(403, 'You do not have access to this workspace');
+  return row.role as WorkspaceRole;
 }
 
 export async function listMembers(workspace: ActiveWorkspace) {
@@ -119,7 +132,8 @@ export async function changeMemberRole(workspace: ActiveWorkspace, memberId: str
     await lockWorkspace(tx, workspace.id);
     const [member] = await tx.select().from(workspaceMembers).where(and(eq(workspaceMembers.workspaceId, workspace.id), eq(workspaceMembers.userId, memberId)));
     if (!member) throw new HttpError(404, 'Member not found');
-    if (!canAssign(workspace.role, member.role as WorkspaceRole, parsed.data.role)) throw new HttpError(403, 'Your role does not allow this action');
+    const actor = await freshRole(tx, workspace);
+    if (memberId === workspace.userId || !canAssign(actor, member.role as WorkspaceRole, parsed.data.role)) throw new HttpError(403, 'Your role does not allow this action');
     if (member.role === 'owner' && parsed.data.role !== 'owner' && await ownerCount(tx, workspace.id) <= 1) throw new HttpError(409, 'An organization needs at least one owner');
     await tx.update(workspaceMembers).set({ role: parsed.data.role }).where(and(eq(workspaceMembers.workspaceId, workspace.id), eq(workspaceMembers.userId, memberId)));
     return { user_id: memberId, role: parsed.data.role };
@@ -136,7 +150,7 @@ export async function removeMember(workspace: ActiveWorkspace, memberId: string)
     await lockWorkspace(tx, workspace.id);
     const [member] = await tx.select().from(workspaceMembers).where(and(eq(workspaceMembers.workspaceId, workspace.id), eq(workspaceMembers.userId, memberId)));
     if (!member) throw new HttpError(404, 'Member not found');
-    if (!leaving && !canAssign(workspace.role, member.role as WorkspaceRole, 'viewer')) throw new HttpError(403, 'Your role does not allow this action');
+    if (!leaving && !canAssign(await freshRole(tx, workspace), member.role as WorkspaceRole, 'viewer')) throw new HttpError(403, 'Your role does not allow this action');
     if (member.role === 'owner' && await ownerCount(tx, workspace.id) <= 1) throw new HttpError(409, 'An organization needs at least one owner');
     await tx.delete(workspaceMembers).where(and(eq(workspaceMembers.workspaceId, workspace.id), eq(workspaceMembers.userId, memberId)));
     return { removed: true, left: leaving };
@@ -177,7 +191,7 @@ export async function inviteMember(workspace: ActiveWorkspace, input: unknown) {
     }).returning();
     return row;
   });
-  void sendAccountEmail(workspace.userId, { kind: 'invitation', to: email, url });
+  after(() => sendAccountEmail(workspace.userId, { kind: 'invitation', to: email, url }));
   return { invitation: { id: result.id, email, role: parsed.data.role, expires_at: result.expiresAt.toISOString(), created_at: result.createdAt.toISOString() }, url };
 }
 
@@ -204,8 +218,10 @@ export async function invitationPreview(token: string) {
 }
 
 /** Accepting needs the link and a signed-in account with the invited email address. */
-export async function acceptInvitation(userId: string, userEmail: string, token: string) {
+export async function acceptInvitation(userId: string, userEmail: string, token: string, emailVerified = false) {
   if (!tokenPattern.test(token)) throw new HttpError(404, 'This invitation is invalid or expired');
+  // With email delivery available, an address must be confirmed before it can claim an invitation.
+  if (emailDeliveryAvailable() && !emailVerified) throw new HttpError(403, 'Confirm your email address before accepting the invitation');
   return getDb().transaction(async tx => {
     const [invitation] = await tx.select().from(workspaceInvitations)
       .where(and(eq(workspaceInvitations.tokenHash, hash(token)), isNull(workspaceInvitations.acceptedAt), isNull(workspaceInvitations.revokedAt), gt(workspaceInvitations.expiresAt, new Date())))
@@ -213,6 +229,8 @@ export async function acceptInvitation(userId: string, userEmail: string, token:
     if (!invitation) throw new HttpError(404, 'This invitation is invalid or expired');
     if (invitation.email !== userEmail.trim().toLowerCase()) throw new HttpError(403, 'Sign in with the email address that received the invitation');
     await lockWorkspace(tx, invitation.workspaceId);
+    const [{ members }] = await tx.select({ members: sql<number>`count(*)::int` }).from(workspaceMembers).where(eq(workspaceMembers.workspaceId, invitation.workspaceId));
+    if (members >= workspaceLimits.maxMembers) throw new HttpError(409, 'The organization reached its member limit');
     await tx.insert(workspaceMembers).values({ workspaceId: invitation.workspaceId, userId, role: invitation.role }).onConflictDoNothing();
     await tx.update(workspaceInvitations).set({ acceptedAt: new Date() }).where(eq(workspaceInvitations.id, invitation.id));
     return { workspace_id: invitation.workspaceId };

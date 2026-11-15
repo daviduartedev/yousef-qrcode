@@ -162,5 +162,7 @@
   "Send my contact": "Send my contact",
   "Published. Your card is live.": "Published. Your card is live.",
   "{{views}} views · {{saves}} saves in 30 days · {{contacts}} contacts": "{{views}} views · {{saves}} saves in 30 days · {{contacts}} contacts",
-  "(email or phone required)": "(email or phone required)"
+  "(email or phone required)": "(email or phone required)",
+  "Confirm your email address before accepting the invitation": "Confirm your email address before accepting the invitation",
+  "The workspace changed in another tab. Reload the page.": "The workspace changed in another tab. Reload the page."
 }

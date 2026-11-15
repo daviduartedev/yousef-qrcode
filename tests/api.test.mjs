@@ -1537,6 +1537,10 @@ async function person() {
   const profile = account();
   const response = await request("/api/auth/sign-up/email", { method: "POST", body: profile });
   assert.equal(response.status, 200);
+  // With email delivery on, invitations need a confirmed address; confirm it through the local outbox.
+  const message = await outboxMessage(profile.email, "verify-email");
+  const link = new URL(message.url);
+  await request(link.pathname + link.search);
   return { email: profile.email, session: cookieOf(response), cookie: cookieOf(response) };
 }
 /** Switches the active workspace; the workspace cookie is added to the session cookie. */
@@ -1594,6 +1598,12 @@ test("organizations share content by role, and removing a member ends access imm
   assert.equal(members.members.length, 3);
   assert.deepEqual(members.invitations, [], "only managers see pending invitations");
 
+  const stale = await request("/api/qr-codes", { method: "POST", cookie: owner.session, headers: { origin: base, cookie: owner.session, "content-type": "application/json", "x-workspace-id": org.id },
+    body: { title: "Wrong tab", destination_url: "https://example.test/tab" } });
+  assert.equal(stale.status, 409, "a tab showing another workspace cannot write after a switch");
+  const viewerEditor = await request(`/linkpages/${(await linkpage.clone().json()).linkpage.id}`, { cookie: viewer.cookie });
+  assert.equal(viewerEditor.status, 404, "viewers do not get an editable editor");
+  assert.equal((await request(`/linkpages/${(await linkpage.clone().json()).linkpage.id}`, { cookie: editor.cookie })).status, 200);
   const forged = { ...outsider, cookie: `${outsider.session}; qrc_workspace=${org.id}` };
   assert.deepEqual(await titles(forged.cookie), [], "a forged workspace cookie falls back to the personal workspace");
   assert.equal((await request(`/api/qr-codes/${orgQrId}`, { cookie: forged.cookie })).status, 404);
@@ -1620,12 +1630,17 @@ test("invitations are bound to the invited email, can be revoked and never leak 
   const owner = await person();
   const invited = await person();
   const stranger = await person();
+  const unverifiedProfile = account();
+  const unverified = cookieOf(await request("/api/auth/sign-up/email", { method: "POST", body: unverifiedProfile }));
   const org = (await (await request("/api/workspaces", { method: "POST", cookie: owner.session, body: { name: "Studio" } })).json()).workspace;
   await useWorkspace(owner, org.id);
   const invite = await (await request("/api/workspaces/current/invitations", { method: "POST", cookie: owner.cookie, body: { email: invited.email.toUpperCase(), role: "editor" } })).json();
   const token = invite.url.split("/invite/")[1];
   assert.match(token, /^[A-Za-z0-9_-]{43}$/);
   assert.equal((await request("/api/invitations/accept", { method: "POST", cookie: stranger.session, body: { token } })).status, 403, "other email addresses cannot accept");
+  const forUnverified = await (await request("/api/workspaces/current/invitations", { method: "POST", cookie: owner.cookie, body: { email: unverifiedProfile.email, role: "viewer" } })).json();
+  const unconfirmed = await request("/api/invitations/accept", { method: "POST", cookie: unverified, body: { token: forUnverified.url.split("/invite/")[1] } });
+  assert.equal(unconfirmed.status, 403, "an unconfirmed address cannot claim an invitation");
   const page = await request(`/invite/${token}`, { cookie: invited.session });
   assert.equal(page.status, 200);
   assert.match(await page.text(), /Studio/);

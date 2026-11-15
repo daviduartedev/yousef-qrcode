@@ -16,6 +16,7 @@ import { qrBulkLabelLimit } from "@/lib/qr-list";
 import type { QRCodeRecord } from "@/lib/qr-types";
 import { getQRCode } from "@/lib/qrTracking";
 import { loadAssetImage } from "@/lib/asset-image";
+import { workspaceHeaders } from "@/lib/workspace-client";
 
 const messages = {
   en: {
@@ -178,7 +179,7 @@ export function QRBulkActions({ selected, onClear, onChanged, labels, origin }: 
     try {
       const response = await fetch("/api/qr-codes/bulk", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", ...workspaceHeaders() },
         body: JSON.stringify({ ids: selected.map(qr => qr.id), labelIds }),
         signal: controller.signal,
       });

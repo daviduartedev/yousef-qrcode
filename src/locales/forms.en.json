@@ -151,5 +151,7 @@
   "Submit button text": "Submit button text",
   "{{responses}} answers · {{views}} views in 30 days": "{{responses}} answers · {{views}} views in 30 days",
   "Reload the page and send again": "Reload the page and send again",
-  "(edited)": "(edited)"
+  "(edited)": "(edited)",
+  "Confirm your email address before accepting the invitation": "Confirm your email address before accepting the invitation",
+  "The workspace changed in another tab. Reload the page.": "The workspace changed in another tab. Reload the page."
 }

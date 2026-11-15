@@ -1,7 +1,7 @@
 import 'server-only';
 import { cookies, headers } from 'next/headers';
 import { notFound } from 'next/navigation';
-import { requireApiUser } from '@/server/http';
+import { HttpError, requireApiUser } from '@/server/http';
 import { requirePageSession } from '@/server/session';
 import { assertPermission, resolveWorkspace, type ActiveWorkspace } from '@/server/workspaces';
 import { workspaceCookie, type WorkspacePermission } from '@/lib/workspaces';
@@ -21,6 +21,9 @@ function cookieValue(header: string | null, name: string) {
 export async function requireApiWorkspace(request: Request, permission: WorkspacePermission = request.method === 'GET' || request.method === 'HEAD' ? 'read' : 'write'): Promise<ActiveWorkspace> {
   const user = await requireApiUser(request);
   const workspace = await resolveWorkspace(user.id, cookieValue(request.headers.get('cookie'), workspaceCookie));
+  // A tab sends the workspace it shows; after a switch in another tab its requests are refused instead of landing elsewhere.
+  const expected = request.headers.get('x-workspace-id');
+  if (expected && expected !== workspace.id) throw new HttpError(409, 'The workspace changed in another tab. Reload the page.');
   assertPermission(workspace, permission);
   return workspace;
 }

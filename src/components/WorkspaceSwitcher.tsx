@@ -3,6 +3,7 @@ import { useEffect, useId, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
 import type { WorkspaceSummary } from '@/lib/workspaces';
+import { rememberWorkspace } from '@/lib/workspace-client';
 
 /** Chooses the workspace whose content the app shows; the server checks membership on every request. */
 export function WorkspaceSwitcher() {
@@ -15,7 +16,7 @@ export function WorkspaceSwitcher() {
   useEffect(() => {
     let alive = true;
     fetch('/api/workspaces', { credentials: 'same-origin' }).then(response => response.ok ? response.json() : null)
-      .then(body => { if (alive && body) setState(body); }).catch(() => {});
+      .then(body => { if (alive && body) { rememberWorkspace(body.active.id); setState(body); } }).catch(() => {});
     return () => { alive = false; };
   }, []);
 
