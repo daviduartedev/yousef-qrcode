@@ -1,4 +1,4 @@
-import { deleteCode, getCode, updateCodeDesign } from "@/server/qr-codes";
+import { deleteCode, getCode, updateCode } from "@/server/qr-codes";
 import {
   requireApiUser,
   requireSameOrigin,
@@ -29,7 +29,7 @@ export async function PATCH(
     requireSameOrigin(request);
     const user = await requireApiUser(request);
     return Response.json(
-      await updateCodeDesign(
+      await updateCode(
         user.id,
         (await context.params).id,
         await readJson(request),

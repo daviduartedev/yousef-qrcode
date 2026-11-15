@@ -1,6 +1,6 @@
 import "server-only";
 import { randomBytes } from "node:crypto";
-import { and, desc, eq } from "drizzle-orm";
+import { and, count, desc, eq, ilike, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { getDb } from "@/server/db";
 import { qrCodes } from "@/server/db/schema";
@@ -8,6 +8,7 @@ import { getServerEnv } from "@/server/env";
 import { HttpError } from "@/server/http";
 import type { QRCodeRecord } from "@/lib/qr-types";
 import { qrDesignSchema, hasVisibleContrast } from "@/lib/qr-design";
+import { qrPageSize, type QRListQuery } from "@/lib/qr-list";
 
 export function safeDestination(value: string) {
   try {
@@ -36,9 +37,10 @@ const createInput = z
     tracking_enabled: z.boolean().default(true),
   })
   .strict();
-const updateInput = z
-  .object({ design: qrDesignSchema.refine(hasVisibleContrast) })
-  .strict();
+const updateInput = z.union([
+  z.object({ design: qrDesignSchema.refine(hasVisibleContrast) }).strict(),
+  z.object({ is_active: z.boolean() }).strict(),
+]);
 
 export function qrRecord(row: typeof qrCodes.$inferSelect): QRCodeRecord {
   return {
@@ -66,6 +68,35 @@ export async function listCodes(userId: string) {
       .orderBy(desc(qrCodes.createdAt))
       .limit(1000)
   ).map(qrRecord);
+}
+
+export async function getQRCounts(userId: string) {
+  const [counts] = await getDb().select({
+    total: count(),
+    active: sql<number>`count(*) filter (where ${qrCodes.trackingEnabled} and ${qrCodes.isActive})`.mapWith(Number),
+    inactive: sql<number>`count(*) filter (where ${qrCodes.trackingEnabled} and not ${qrCodes.isActive})`.mapWith(Number),
+    scans: sql<number>`coalesce(sum(${qrCodes.totalScans}) filter (where ${qrCodes.trackingEnabled}), 0)`.mapWith(Number),
+  }).from(qrCodes).where(eq(qrCodes.userId, userId));
+  return counts;
+}
+
+export async function listCodePage(userId: string, query: QRListQuery) {
+  const phrase = `%${query.q.replace(/[\\%_]/g, "\\$&")}%`;
+  const filters = and(
+    eq(qrCodes.userId, userId),
+    query.q ? or(ilike(qrCodes.title, phrase), ilike(qrCodes.destinationUrl, phrase)) : undefined,
+    query.mode || query.status ? eq(qrCodes.trackingEnabled, query.mode !== 'direct') : undefined,
+    query.status ? eq(qrCodes.isActive, query.status === 'active') : undefined,
+  );
+  return getDb().transaction(async (tx) => {
+    const [{ total }] = await tx.select({ total: count() }).from(qrCodes).where(filters);
+    const pages = Math.max(1, Math.ceil(total / qrPageSize));
+    const page = Math.min(query.page, pages);
+    const rows = await tx.select().from(qrCodes).where(filters)
+      .orderBy(desc(qrCodes.createdAt), desc(qrCodes.id))
+      .limit(qrPageSize).offset((page - 1) * qrPageSize);
+    return { qrCodes: rows.map(qrRecord), total, page, pages };
+  }, { isolationLevel: 'repeatable read', accessMode: 'read only' });
 }
 export async function createCode(userId: string, input: unknown) {
   const parsed = createInput.safeParse(input);
@@ -114,7 +145,7 @@ export async function getCode(userId: string, id: string) {
   if (!row) throw new HttpError(404, "QR code not found");
   return codeResponse(row);
 }
-export async function updateCodeDesign(
+export async function updateCode(
   userId: string,
   id: string,
   input: unknown,
@@ -122,11 +153,18 @@ export async function updateCodeDesign(
   if (!z.string().uuid().safeParse(id).success)
     throw new HttpError(404, "QR code not found");
   const parsed = updateInput.safeParse(input);
-  if (!parsed.success) throw new HttpError(400, "Provide a valid QR design");
+  if (!parsed.success) throw new HttpError(400, "Provide a valid QR design or tracking state");
+  const values = "design" in parsed.data
+    ? { design: parsed.data.design }
+    : { isActive: parsed.data.is_active };
   const [row] = await getDb()
     .update(qrCodes)
-    .set({ design: parsed.data.design, updatedAt: new Date() })
-    .where(and(eq(qrCodes.id, id), eq(qrCodes.userId, userId)))
+    .set({ ...values, updatedAt: new Date() })
+    .where(and(
+      eq(qrCodes.id, id),
+      eq(qrCodes.userId, userId),
+      "isActive" in values ? eq(qrCodes.trackingEnabled, true) : undefined,
+    ))
     .returning();
   if (!row) throw new HttpError(404, "QR code not found");
   return codeResponse(row);

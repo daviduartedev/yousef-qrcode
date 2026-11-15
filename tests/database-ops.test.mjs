@@ -11,7 +11,7 @@ mkdirSync(resolve('.scratch'), { recursive: true });
 
 async function database(t, environment = 'local') {
   const privateConfig = parse(readFileSync('.env.local'));
-  const url = new URL(privateConfig.TEST_DATABASE_ADMIN_URL || privateConfig.DATABASE_URL);
+  const url = new URL(process.env.TEST_DATABASE_ADMIN_URL || privateConfig.TEST_DATABASE_ADMIN_URL || privateConfig.DATABASE_URL);
   assert.ok(['localhost', '127.0.0.1', '[::1]'].includes(url.hostname), 'Operational tests require an isolated localhost database.');
   const name = 'qrconnect_ops_' + crypto.randomUUID().replaceAll('-', '');
   const admin = new Pool({ connectionString: url.toString(), max: 1 });

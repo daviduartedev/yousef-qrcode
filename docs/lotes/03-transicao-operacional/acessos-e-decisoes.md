@@ -2,19 +2,20 @@
 
 Registro em 02/11/2026. Pendente significa sem prontidão/execução comprovada; não presumir inexistência fora desta conversa. Guardar valores e evidências identificáveis apenas em canal privado.
 
-Em 10/11/2026, o proprietário escolheu Neon Free para o PostgreSQL de homologação e do ensaio de restauração. A decisão substitui a escolha anterior de Supabase para esses dois alvos. O cliente definirá o provedor e o operador de produção. Better Auth continua no aplicativo. A Vercel segue como opção prevista para hospedar o aplicativo de homologação, com projeto e origem ainda por confirmar. Ver [preparação dos bancos Neon](operacao.md#homologação-e-restauração-no-neon).
+Em 10/11/2026, o proprietário escolheu Neon Free para o PostgreSQL de homologação e do ensaio de restauração. O cliente definirá o provedor e o operador de produção. Better Auth continua no aplicativo. Ver [preparação dos bancos Neon](operacao.md#homologação-e-restauração-no-neon).
 
-O projeto Neon de homologação `yousef-hml` foi vinculado à branch Neon chamada `production`. O banco PostgreSQL 18 estava vazio e recebeu as migrations do Drizzle. O destino de restauração e a hospedagem do aplicativo seguem pendentes.
+O projeto Neon de homologação `yousef-hml` usa a branch Neon chamada `production`. O PostgreSQL 18 recebeu as quatro migrations do Drizzle. A aplicação de homologação está na [Vercel](https://yousef-xi.vercel.app/). O destino de restauração segue pendente.
+
+Em 11/11/2026, o proprietário aceitou o #13 com base nos testes hospedados e dispensou a rodada manual de reabertura, PNG/SVG e leitura no celular. Os testes comprovaram cadastro e login de duas contas fictícias, isolamento, rejeição de origem indevida, logout, redirecionamento sem cache, HEAD sem scan e um scan persistido no Neon. As contas fictícias do teste automatizado foram removidas. O proprietário adiou o backup e autorizou seguir para a preparação do #15.
 
 ## Decisões estabelecidas
 
-- Main em `ba13e603`, Lotes 1/2 validados, PR #10 MERGED; pais #1/#6 abertos. Preservar interface, inglês/árabe/RTL, skills e proteções.
+- Lotes 1/2 validados, PRs #5, #10, #16 e #17 integrados. Preservar interface, inglês/árabe/RTL, skills e proteções.
 - Proprietário confirmou acesso ao Supabase antigo e pode criar outro; nenhum novo projeto confirmado pronto.
 - **D0 resolvida:** respondeu “Sim, começar do zero” após ser informado de que não seriam importados usuários, QRs ou histórico e de que QRs dependentes do serviço antigo parariam quando desligado.
 - Migração de dados/auth, hashes, reconciliação e ponte foram retiradas. Legado não é pré-condição. O projeto antigo não foi apagado/desligado por essa decisão.
-- Destino segue Postgres no novo Supabase e Better Auth no schema privado; Supabase Auth não é necessário.
-- Hospedagem escolhida: Vercel. Sem domínio próprio definido; usar inicialmente a origem estável `vercel.app` efetivamente atribuída ao projeto. Projetos/contas ainda não acessados, integrações Supabase/Vercel encontradas mas sem conexão confirmada.
-- Sequência #12 → #13 → #15; #14 retirado como não planejado, sem alegar implementação. Aprovação de escopo não conclui validação humana nem libera commit/push/deploy.
+- A homologação usa Neon e Vercel. A origem HTTPS e o banco de produção serão definidos pelo cliente.
+- #12 adiado por decisão do proprietário, #13 aceito e #15 segue para preparação. #14 retirado.
 
 ## Acessos ao novo ambiente
 
@@ -24,9 +25,9 @@ Responsáveis são papéis a atribuir. O proprietário confirma a conta Neon de 
 |---|---|---|---|---|
 | A2 | Backup/recuperação novos — operador | Ensaio local passou; recuperação hospedada e guarda externa não comprovadas | Definir guarda privada/retencão e comprovar schema/migrations/configuração no alvo remoto separado | 3.1 |
 | A3 | PostgreSQL — proprietário e cliente | Homologação inicializada no Neon; restauração e produção pendentes | Confirmar destino de restauração isolado com PostgreSQL 18 e banco de produção separado sob gestão do cliente | 3.1–3.2 |
-| A4 | Vercel — operador | Provedor escolhido; conta/time/projeto e acesso não confirmados | Homologação e produção separadas, configuração privada, HTTPS, logs sanitizados e artefatos de retorno | 3.1–3.4 |
+| A4 | Hospedagem — operador | Homologação ativa na Vercel. O operador do cliente configurou o deploy. | Confirmar conta, projeto e acesso para produção, com configuração separada e logs sanitizados | 3.4 |
 | A5 | Novas contas de homologação — responsável pelos testes | Sem perfis permanentes definidos | Duas contas autorizadas isoladas, sem senha padrão, sem copiar legado nem levar fixtures a produção | 3.2 |
-| A7 | Origem Vercel/TLS — proprietário | Sem domínio próprio; origem estável `vercel.app` ainda não alocada | Confirmar URL efetiva e `APP_URL` de cada ambiente antes de distribuir QRs; domínio próprio pode ser decidido depois | 3.2–3.4 |
+| A7 | Origem HTTPS — proprietário | Homologação confirmada em `yousef-xi.vercel.app` | Confirmar URL efetiva de produção e `APP_URL` antes de distribuir QRs de produção | 3.4 |
 | A9 | Operação/plantão — gestor | Responsáveis/janela não definidos | Go/no-go, observabilidade, acompanhamento e retorno | 3.4 |
 
 A1 (origem), A6 (função antiga), A8 (contas antigas) e A10 (políticas antigas) deixam de ser requisitos. Isso dispensa trabalho sobre legado; não declara sua segurança, limpeza ou desligamento.
@@ -48,12 +49,12 @@ D2–D5 (hashes/provedores antigos, órfãos/mapeamentos, campos legados e conta
 | Gate | Evidência para concluir | Estado |
 |---|---|---|
 | G1 — novo ambiente recuperável | Destinos/configuração identificados, migrations e backup do novo banco restaurado separadamente com dados sintéticos conferidos | Ensaio local passou; pendente de A2–A4/D1 no ambiente hospedado |
-| G2 — homologação sem legado | Novas contas isoladas, sessões, origem, persistência e QRs/downloads confirmados no ambiente hospedado; sem importação antiga | Pendente de G1, A5/A7 e D6 |
+| G2 — homologação sem legado | Novas contas isoladas, sessões, origem, persistência e QRs/downloads confirmados no ambiente hospedado; sem importação antiga | Aceito em 11/11/2026 com evidência HTTP e dispensa explícita da rodada manual hospedada. G1 segue adiado. |
 | G3 — ponte | Dispensado por D0; não implementado | Não aplicável |
-| G4 — prontidão de publicação | Homologação aprovada, retorno ensaiado com gravações posteriores, alvo de produção sem legado/fixtures confirmado, observabilidade e responsáveis definidos, código revisado/validado pelo humano | Pendente de G2, A9 e D7–D9 |
+| G4 — prontidão de publicação | Homologação aprovada, retorno ensaiado com gravações posteriores, alvo de produção sem legado/fixtures confirmado, observabilidade e responsáveis definidos, código revisado/validado pelo humano | Pendente de ambiente de produção, A9, D7–D9 e decisão sobre a recuperação adiada |
 | G5 — produção acompanhada | Versão no domínio final, novas contas/QRs funcionando, scans/falhas observados pelo período acordado; sem requisito de URLs antigas | Pendente de G4 e publicação |
 
-Nenhum gate aplicável foi concluído. Os comandos de preparação/backup/restauração foram ensaiados em bancos locais descartáveis, com dados sintéticos e destino separado. O banco Neon de homologação está inicializado. Guarda e retenção de backups, restauração hospedada, implantação do aplicativo e operação de produção permanecem pendentes.
+G2 foi aceito. G1 continua pendente de guarda e retenção de backups e restauração hospedada. G4 e G5 seguem pendentes de preparação e operação de produção.
 
 ## Evidências privadas
 

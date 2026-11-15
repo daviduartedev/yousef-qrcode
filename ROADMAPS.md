@@ -1,12 +1,12 @@
 # Roadmaps — QRConnect
 
-Planejamento original de 01/11/2026, reconciliado em 02/11/2026 com o código integrado e o GitHub. Base verificada: `main` e `origin/main` em `ba13e603d208ab0296030739ee18a7ff9daecb5e`, árvore limpa antes da abertura da branch do próximo lote. O PR #5 (Lote 1) está integrado; o PR #10 (Lote 2) está MERGED e seus tickets #7–#9 estão fechados. As especificações pai #1 e #6 permanecem abertas intencionalmente.
+Planejamento original de 01/11/2026, com estado atualizado em 11/11/2026. Os PRs #5 e #10 entregaram a base e o editor. Os PRs #16 e #17 integraram o preparo operacional, o Neon e a correção de build para a Vercel. As especificações pai #1 e #6 permanecem abertas intencionalmente.
 
-Os Lotes 1 e 2 tiveram validação humana local concluída. Os itens marcados abaixo representam essas entregas, sem declarar homologação externa ou produção concluídas. Procedimento documentado não equivale a operação executada. A referência visual é a interface integrada nesses lotes; não há nova escolha visual pendente.
+Os Lotes 1 e 2 tiveram validação humana local. A [homologação](https://yousef-xi.vercel.app/) recebeu aceite do proprietário em 11/11/2026 com base nos testes hospedados de cadastro, login, isolamento, logout e tracking. O proprietário dispensou a rodada manual hospedada de reabertura do design, PNG/SVG e leitura no celular.
 
-Objetivo: preservar identidade visual e fluxos, migrar o aplicativo para Next.js + Postgres, remover dependências da Lovable e usar Better Auth com Postgres hospedado no novo Supabase. As correções do editor já foram entregues; novos módulos da referência continuam futuros.
+O produto usa Next.js, Better Auth e PostgreSQL. A homologação usa Vercel e Neon. O cliente ainda definirá a infraestrutura de produção. As correções do editor já foram entregues e os novos módulos da referência Uniqode continuam futuros.
 
-**Decisão posterior em 02/11/2026:** o proprietário confirmou começar do zero, sem importar usuários, QR Codes ou histórico, aceitando que QRs dependentes do serviço antigo parem quando ele for desligado. Migração de dados, compatibilidade antiga e ponte foram dispensadas, não executadas. Novo ambiente, recuperação, homologação, publicação e retorno continuam pendentes. Esta decisão não apaga nem desliga a origem automaticamente.
+Em 02/11/2026, o proprietário confirmou o início do zero, sem importar usuários, QR Codes ou histórico, e dispensou a ponte de URLs antigas. O serviço de origem tem operação separada. Em 11/11/2026, a recuperação hospedada continua adiada e a publicação e o retorno seguem pendentes.
 
 ## Sequência de entregas
 
@@ -14,24 +14,51 @@ Objetivo: preservar identidade visual e fluxos, migrar o aplicativo para Next.js
 |---|---|---|---|
 | R0 | Preparação, acesso aos dados e proteção do projeto | Imediata | — |
 | R1 | Migração da base para Next.js + Postgres em homologação | Essencial | R0 |
-| R2 | Correções do editor e primeira versão em produção | Essencial | R1 |
-| R3 | Gestão de QR Codes e analytics | Alta | R2 |
+| R2 | Editor, paridade do site público e da entrada, primeira versão em produção | Essencial | R1 |
+| R3 | Paridade da gestão, criação e analytics de QR Codes | Alta | Editor do R2 e homologação aceitos para iniciar o painel |
 | R4 | Linkpages publicadas | Evolução | R3 |
 | R5 | Cartões digitais publicados | Evolução | R3 |
-| R6 | Formulários, comercialização e recursos avançados | A definir | Base anterior e seleção de escopo |
+| R6 | Formulários, biblioteca, equipe, extensões e operação comercial | Em ondas | Dependências por módulo |
 
-R4 e R5 são independentes entre si. Sua ordem pode seguir a prioridade comercial. O planejamento não pressupõe a implementação de todas as opções visíveis na interface da Uniqode.
+R4 e R5 são independentes entre si. A ordem pode seguir a prioridade comercial. A meta atual é reproduzir as telas e os fluxos da Uniqode com a identidade do QRConnect. A [auditoria do trial](docs/referencias/auditoria-paridade-uniqode.md) registra a evidência, as lacunas e os pontos a verificar antes de detalhar cada lote.
 
-| Etapa | Estado verificado em 02/11/2026 |
+| Etapa | Estado em 11/11/2026 |
 |---|---|
-| R0 | Proteções/referência visual estabelecidas; inventário e recuperação do novo ambiente pendentes; legado dispensado. |
-| R1 | Base Next.js + Postgres entregue localmente; homologação externa e operação pendentes; sem importação antiga. |
+| R0 | Banco de homologação provisionado e recuperação local aceita. Backup, retenção e restauração hospedada adiados no #12. |
+| R1 | Homologação Vercel + Neon aceita no #13 com evidência HTTP e dispensa da rodada manual. |
 | R2 | Editor entregue/validado; publicação e retorno operacional pendentes; ponte antiga dispensada. |
-| R3 | Não iniciado como lote próprio; CRUD/tracking básicos da base não concluem gestão e analytics. |
+| R3 | Painel e gestão do Lote 4 (#19–#24) aceitos pelo proprietário em 15/11/2026. A próxima fatia detalha a navegação e as operações de gestão. |
 | R4–R5 | Módulos publicados/persistidos ainda não entregues; abas/editor local herdados não os substituem. |
-| R6 | Opções futuras que exigem seleção e especificação. |
+| R6 | Superfícies principais mapeadas no trial. Regras e fluxos restritos a planos superiores precisam de evidência própria. |
 
-O próximo trabalho é o **Lote 3 — publicação inicial com banco novo**, fechando a operação de R0–R2, não o roadmap R3. Ver [especificação](docs/lotes/03-transicao-operacional/spec.md), [fatias](docs/lotes/03-transicao-operacional/README.md) e [acessos e decisões](docs/lotes/03-transicao-operacional/acessos-e-decisoes.md). Não iniciar R3 ou módulos posteriores automaticamente.
+A primeira fatia do R3 segue em homologação, na Vercel e no Neon já configurados na conta do proprietário. Ver [especificação validada do painel e da gestão](docs/referencias/r3-painel-e-gestao.md). A primeira publicação e o ensaio de retorno do [#15](https://github.com/daviduartedev/yousef-qrcode/issues/15) ficam adiados. O [#12](https://github.com/daviduartedev/yousef-qrcode/issues/12) permanece aberto. Antes de publicar, confirmar ambiente, operador, origem HTTPS, retorno, observação e critérios para liberar, além de decidir como tratar a recuperação adiada. Ver [acessos e decisões](docs/lotes/03-transicao-operacional/acessos-e-decisoes.md).
+
+## Ordem do trabalho de paridade
+
+| Ordem | Fatia | Aceite observável | Dependência |
+|---|---|---|---|
+| 1 | R3 · Navegação e gestão | Visão geral e lista comparadas em vazio e com dados. Gaveta mobile, busca, visualizações, ordenação, filtros, pastas e operações em lote com efeitos verificáveis. | Lote 4 aceito em 15/11/2026 |
+| 2 | R3 · Criação e detalhe | Seleção, configuração, personalização, conclusão e download. O QR estático lê o conteúdo e o dinâmico conserva a URL ao trocar o destino. | Gestão, regras por tipo e editor existentes |
+| 3 | R3 · Analytics | Métricas de QR e visão consolidada com período, granularidade, filtros e exportação que conferem com os eventos de teste. | QR rastreável, eventos e regras de contagem |
+| 4 | R4 e R5 · Páginas e cartões | Galerias, editores, rascunhos, publicação, leitura pública e métricas. Produto Cards tem navegação e contatos próprios. | Biblioteca básica de arquivos, quando exigida |
+| 5 | R6 · Formulários e extensões | Editor e respostas públicas; biblioteca, equipes, domínios, integrações, API, Webhooks e IA em lotes independentes. | Contratos de cada módulo; equipes antes de papéis e chaves por organização |
+| 6 | R6 · Planos e operação comercial | Trial, limites, permissões, assinatura e faturamento demonstrados em sandbox. | Regras dos módulos e evidência dos fluxos bloqueados |
+
+A paridade do site público e da entrada do R2 pode avançar em paralelo à gestão. Cada fatia compara os mesmos cenários nos dois produtos e testa o efeito das ações, além da aparência.
+
+### Tickets propostos para a etapa 2
+
+| Ticket proposto | Entrega verificável | Dependência |
+|---|---|---|
+| 2.1 | Navegação da gestão em desktop e gaveta no celular, com foco, seleção e retorno consistentes | Lote 4 validado |
+| 2.2 | Busca global por texto com resultados de QR por nome e destino, navegável por teclado | Lote 4 validado |
+| 2.3 | Visualizações e ordenação da lista preservadas na URL, com estados vazio e preenchido | Lote 4 validado |
+| 2.4 | Filtros por operador para campos existentes, combinados com ordenação e paginação | 2.3 |
+| 2.5 | Pastas, rótulos e lista de acompanhamento, com controles e filtros persistidos por conta | 2.4 |
+| 2.6 | Seleção múltipla, download e aplicação de rótulos em lote, com retorno por registro quando houver falhas | 2.5 |
+| 2.7 | Importação em lote com prévia, validação por linha e resumo de resultados | 2.6 e contrato dos tipos aceitos |
+
+A busca por imagem de QR, os filtros por ciclo de vida e proprietário e os atalhos para Analytics e Templates dependem de verificação do fluxo de referência ou de módulos que ainda serão entregues. Ver [auditoria do trial](docs/referencias/auditoria-paridade-uniqode.md).
 
 ## R0 — Preparação e proteção do projeto
 
@@ -56,7 +83,7 @@ O próximo trabalho é o **Lote 3 — publicação inicial com banco novo**, fec
 - [x] Preparar o projeto Next.js com TypeScript e execução de servidor para as APIs e o banco.
 - [x] Reaproveitar componentes, estilos, imagens, temas e traduções, preservando as rotas `/`, `/auth`, `/app`, `/my-qrcodes` e `/qr`.
 - [x] Adaptar navegação e componentes dependentes do navegador, incluindo QR, gráficos, tema e idioma.
-- [x] Preparar Postgres local, migrations e acesso exclusivamente pelo servidor com Drizzle e Better Auth. Supabase hospedará Postgres; contas antigas não serão migradas.
+- [x] Preparar Postgres local e Neon em homologação, com migrations e acesso pelo servidor usando Drizzle e Better Auth.
 - [x] Substituir cadastro, login, logout e sessões; aplicar autorização por usuário em todas as consultas e alterações.
 - [x] Adaptar no novo código as referências a `auth.users`, `auth.uid()` e demais dependências específicas do Supabase.
 - Não aplicável por início do zero: importação de usuários, QRs, scans e mapeamento de IDs antigos.
@@ -64,7 +91,8 @@ O próximo trabalho é o **Lote 3 — publicação inicial com banco novo**, fec
 - [ ] Usar domínio definitivo nos novos QR Codes rastreáveis; ponte antiga dispensada.
 - [x] Remover do novo aplicativo `lovable-tagger`, Vite e metadados/ativos da Lovable; documentação conserva somente o contexto histórico necessário.
 - [x] Substituir no novo aplicativo integrações de navegador/auth do Supabase por APIs próprias e Postgres no servidor. Ponte dispensada; serviço original não foi alterado.
-- [ ] Configurar implantação, variáveis de ambiente, backups e acompanhamento de falhas.
+- [x] Implantar a homologação com origem HTTPS, configuração privada e banco Neon.
+- [ ] Definir backups e acompanhamento de falhas para a operação de produção.
 
 **Conclusão vigente:** aplicação em homologação com novas contas isoladas, banco novo e redirecionamento validados. Comparação visual e editor já foram aceitos localmente; sem importação de legado.
 
@@ -83,6 +111,7 @@ O próximo trabalho é o **Lote 3 — publicação inicial com banco novo**, fec
 - [x] Manter tracking funcional e retirar `Update Later` e GPS sem implementação.
 - [x] Concluir a validação dos arquivos e leitura de QR do Lote 2, incluindo logo/moldura, coberta pela confirmação humana e evidências do PR #10. Leitura em homologação/produção será uma verificação operacional distinta.
 - [x] Testar os fluxos essenciais locais de ponta a ponta e corrigir falhas relevantes; Lotes 1 e 2 já validados e integrados.
+- [ ] Comparar a experiência pública e as rotas de entrada da Uniqode em desktop e celular, incluindo CTA, cadastro, login, recuperação e estados de erro.
 - Não aplicável por início do zero: importação final/delta e sincronização com a origem antiga.
 - [ ] Publicar no destino novo, validar novas contas/QRs e acompanhar eventos; URLs antigas não são critério de aceite.
 - [x] Documentar o procedimento de retorno compatível com design/tracking e gravações posteriores à troca.
@@ -94,10 +123,14 @@ O próximo trabalho é o **Lote 3 — publicação inicial com banco novo**, fec
 
 **Objetivo:** transformar o gerador em uma área de gestão consistente.
 
-- [ ] Introduzir menu lateral e navegação entre visão geral, QR Codes e estatísticas.
+- [x] Introduzir menu lateral e navegação entre visão geral, QR Codes e estatísticas básicas por código no Lote 4.
+- [ ] Completar paridade da navegação com gaveta mobile, alternância QR Codes/Cards, busca global e atalhos de Analytics e Templates.
+- [ ] Mapear estados do ciclo de vida e alinhar a composição da Visão geral com conta vazia e com atividade.
 - [ ] Implementar o fluxo de criação em etapas: tipo, conteúdo, personalização e conclusão.
 - [ ] Explicitar QR estático e dinâmico e implementar o conteúdo específico de cada tipo oferecido.
-- [ ] Adicionar busca, filtros, paginação e ações de edição, ativação, desativação e exclusão.
+- [x] Adicionar busca, filtros, paginação e ações de edição, ativação, desativação e exclusão no Lote 4.
+- [ ] Completar listagem com visualizações, ordenação, filtros por operador, pastas, rótulos, watchlist e operações em lote.
+- [ ] Entregar galeria de templates e a etapa final de download, com formatos, tamanhos e correção de erros verificados.
 - [ ] Permitir alterar o destino de um QR dinâmico preservando a URL pública.
 - [ ] Implementar analytics por QR e visão consolidada, com filtro de período, dispositivos e localização aproximada disponível.
 - [ ] Definir o significado de scanner único e o tratamento de bots e acessos repetidos antes de apresentar essa métrica.
@@ -113,6 +146,7 @@ O próximo trabalho é o **Lote 3 — publicação inicial com banco novo**, fec
 - [ ] Construir editor com foto, capa, título, descrição, links, telefone, redes sociais e separadores.
 - [ ] Permitir ordenar, editar e remover blocos com preview de celular.
 - [ ] Salvar rascunho e publicar em uma URL estável, com slug único.
+- [ ] Reproduzir galeria por categoria e salvos, criação a partir de modelo e retomada de rascunho com autosave.
 - [ ] Gerar QR para a página e permitir alterações posteriores sem mudar seu endereço.
 - [ ] Registrar visualizações e cliques conforme métricas definidas.
 - [ ] Integrar listagem e analytics ao dashboard.
@@ -131,6 +165,7 @@ O próximo trabalho é o **Lote 3 — publicação inicial com banco novo**, fec
 - [ ] Permitir reabrir e editar o cartão sem mudar seu endereço público.
 - [ ] Registrar visualizações e ações de contato definidas para a entrega.
 - [ ] Integrar cartões e estatísticas ao dashboard.
+- [ ] Criar navegação de Cards, analytics por cartão, gerenciador de contatos e o fluxo de troca de contato. Mapear eventos e conectores como extensões.
 
 **Conclusão:** cartão editável, publicado, compartilhável e persistido, com ações e arquivo de contato validados em celular.
 
@@ -138,11 +173,12 @@ O próximo trabalho é o **Lote 3 — publicação inicial com banco novo**, fec
 
 **Objetivo:** ampliar o produto conforme prioridade comercial e especificação de cada módulo.
 
-Este roadmap é um conjunto de opções a selecionar e estimar. A presença dessas opções nos vídeos não estabelece o escopo de uma entrega única.
+O trial confirmou entradas de Forms, Asset Library, AI Agents, integrações, API, Webhooks, organizações, domínios e planos. Dividir por dependência e especificar os fluxos que o trial só mostra em estado vazio, comercial ou bloqueado.
 
 | Opção | Definições necessárias antes de implementar |
 |---|---|
 | Formulários e captura de leads | Tipos de campo, validação, destino das respostas e exportação. |
+| Biblioteca de arquivos | Pastas, uploads, limites, propriedade e seleção de mídia nos editores. |
 | Planos e cobrança | Produtos, preços, limites, provedor de pagamento, cancelamento e efeitos sobre recursos publicados. |
 | Domínios personalizados | Propriedade do domínio, configuração, certificados e encaminhamento. |
 | QR protegido, agendado ou com GPS | Fluxo público, permissões, regras de expiração e comportamento de fallback. |
@@ -151,14 +187,14 @@ Este roadmap é um conjunto de opções a selecionar e estimar. A presença dess
 | Equipes, organizações e API pública | Papéis, isolamento de dados, quotas e auditoria. |
 | IA | Problema atendido, qualidade esperada, custos e limites de uso. |
 
-**Conclusão por módulo:** regras especificadas, fluxo funcionando de ponta a ponta e operação validada para a funcionalidade escolhida.
+**Conclusão por módulo:** regras especificadas, telas comparadas e fluxo validado de ponta a ponta em ambiente de teste.
 
 ## Decisões que determinam a execução
 
-1. **Versão visual — resolvida:** preservar a interface integrada e validada nos Lotes 1 e 2; análise dos vídeos e evidências são as referências.
+1. **Referência de paridade:** comparar com o trial da Uniqode observado em 11/11/2026 e usar os vídeos para estados históricos ou ainda indisponíveis. A interface validada nos Lotes 1 e 2 é a base do QRConnect.
 2. **Usuários existentes — resolvida:** início do zero; sem importação, compatibilidade de hashes ou sessões antigas. Novas contas pelo cadastro existente.
 3. **Códigos distribuídos — resolvida:** ponte/continuidade dispensadas. O proprietário aceita que QRs dependentes do endereço antigo parem quando ele for desligado; não houve desligamento automático.
-4. **Expansão do produto:** escolher a prioridade entre linkpages e cartões e quais opções do R6 entram no produto.
+4. **Expansão do produto:** concluir paridade por módulo. Decidir a ordem entre Linkpages e Cards e verificar os fluxos ainda restritos no trial antes de estimar.
 
 As pendências vigentes são do novo ambiente: Postgres, hospedagem, domínio, recuperação, homologação, observabilidade e retorno. Diferenças de dados/políticas do legado deixaram de bloquear a entrega; não representam trabalho concluído. O registro do Lote 3 detalha acessos/decisões sem credenciais. Retirada ou exclusão do serviço antigo não faz parte desta preparação.
 

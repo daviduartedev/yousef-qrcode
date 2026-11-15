@@ -21,7 +21,7 @@ const Auth = () => {
   const { user } = useAuth();
   const { toast } = useToast();
   useEffect(() => {
-    if (user) navigate("/app");
+    if (user) navigate("/overview");
   }, [user, navigate]);
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -60,7 +60,7 @@ const Auth = () => {
           ),
           variant: "destructive",
         });
-      } else navigate("/app");
+      } else navigate("/overview");
     } catch {
       toast({
         title: copy("Erro"),
