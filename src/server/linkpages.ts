@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { getDb } from '@/server/db';
 import { assets, linkPageEvents, linkPages, qrCodes } from '@/server/db/schema';
 import { claimSlug, slugFree } from '@/server/public-slugs';
+import { deactivateLinkedCodes } from '@/server/qr-linked-cleanup';
 import { HttpError } from '@/server/http';
 import { getServerEnv } from '@/server/env';
 import { createCode } from '@/server/qr-codes';
@@ -145,6 +146,7 @@ export async function deleteLinkpage(userId: string, pageId: string) {
       .returning({ id: linkPages.id, qrCodeId: linkPages.qrCodeId });
     if (!row) throw new HttpError(404, 'Linkpage not found');
     // The page's QR code stops redirecting; its address stays reserved for this account.
+    await deactivateLinkedCodes(tx, userId, 'linkpage', row.id);
     if (row.qrCodeId) await tx.update(qrCodes).set({ isActive: false, updatedAt: new Date() })
       .where(and(eq(qrCodes.userId, userId), eq(qrCodes.id, row.qrCodeId)));
     return { deleted: true, qr_code_deactivated: Boolean(row.qrCodeId) };

@@ -9,6 +9,7 @@ import { getServerEnv } from '@/server/env';
 import { createCode } from '@/server/qr-codes';
 import { visitorFrom } from '@/server/visitor';
 import { claimSlug, slugFree } from '@/server/public-slugs';
+import { deactivateLinkedCodes } from '@/server/qr-linked-cleanup';
 import { csvCell, duplicateWindowSeconds } from '@/lib/qr-analytics';
 import { slugify, validSlug } from '@/lib/linkpages';
 import { formContentSchema, formLimits, formTemplates, validateAnswers, type FormContent, type FormRecord, type FormResponseRecord, type FormSummary } from '@/lib/forms';
@@ -130,6 +131,7 @@ export async function deleteForm(userId: string, formId: string) {
   return getDb().transaction(async tx => {
     const [row] = await tx.delete(forms).where(and(eq(forms.userId, userId), eq(forms.id, formId))).returning({ id: forms.id, qrCodeId: forms.qrCodeId });
     if (!row) throw new HttpError(404, 'Form not found');
+    await deactivateLinkedCodes(tx, userId, 'form', row.id);
     if (row.qrCodeId) await tx.update(qrCodes).set({ isActive: false, updatedAt: new Date() }).where(and(eq(qrCodes.userId, userId), eq(qrCodes.id, row.qrCodeId)));
     return { deleted: true, qr_code_deactivated: Boolean(row.qrCodeId) };
   });

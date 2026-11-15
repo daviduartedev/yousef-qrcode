@@ -1,5 +1,6 @@
 import type { QRDesign } from './qr-design';
 import type { QRContent } from './qr-content';
+import type { LinkedContent } from './qr-linked';
 
 export interface QRCodeRecord {
   id: string;
@@ -9,7 +10,8 @@ export interface QRCodeRecord {
   title: string | null;
   qr_type: string;
   design: QRDesign | null;
-  content?: QRContent | null;
+  content?: QRContent | LinkedContent | null;
+  created_by?: string | null;
   tracking_enabled: boolean;
   is_active: boolean;
   total_scans: number;

@@ -10,7 +10,7 @@ export async function GET(request: Request) {
     const params = new URL(request.url).searchParams;
     const paginated = qrListKeys.some(key => params.has(key));
     const result = paginated
-      ? await listCodePage(workspace.id, readQRListQuery(params))
+      ? await listCodePage(workspace.id, readQRListQuery(params), workspace.userId)
       : { qrCodes: await listCodes(workspace.id) };
     return Response.json(result, { headers: privateHeaders });
   } catch (error) { return apiError(error); }
@@ -19,6 +19,6 @@ export async function POST(request: Request) {
   try {
     requireSameOrigin(request);
     const workspace = await requireApiWorkspace(request);
-    return Response.json(await createCode(workspace.id, await readJson(request)), { status: 201, headers: privateHeaders });
+    return Response.json(await createCode(workspace.id, await readJson(request), { createdBy: workspace.userId }), { status: 201, headers: privateHeaders });
   } catch (error) { return apiError(error); }
 }

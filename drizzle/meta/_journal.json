@@ -85,6 +85,13 @@
       "when": 1794764272002,
       "tag": "0011_organizations",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1794766337761,
+      "tag": "0012_qr_types_and_templates",
+      "breakpoints": true
     }
   ]
 }

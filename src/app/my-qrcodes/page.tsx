@@ -17,7 +17,7 @@ export default async function MyCodes({ searchParams }: {
     if (typeof value === 'string') params.set(key, value);
   }
   const query = readQRListQuery(params);
-  const [result, organization] = await Promise.all([listCodePage(workspace.id, query), listOrganization(workspace.id)]);
+  const [result, organization] = await Promise.all([listCodePage(workspace.id, query, workspace.userId), listOrganization(workspace.id)]);
   if (query.page !== result.page) redirect(qrListHref({ ...query, page: result.page }));
   return <MyQRCodes query={query} result={result} organization={organization} origin={getServerEnv().appUrl} />;
 }

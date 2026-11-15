@@ -111,5 +111,21 @@
   "Wi-Fi": "Wi-Fi",
   "Your QR code is ready": "Your QR code is ready",
   "{{size}} px wide": "{{size}} px wide",
-  "{{type}} content": "{{type}} content"
+  "{{type}} content": "{{type}} content",
+  "Loading": "Loading",
+  "Create one": "Create one",
+  "Choose what the QR code opens": "Choose what the QR code opens",
+  "Publish it first": "Publish it first",
+  "No Linkpages yet.": "No Linkpages yet.",
+  "No cards yet.": "No cards yet.",
+  "No forms yet.": "No forms yet.",
+  "Your library is empty.": "Your library is empty.",
+  "Open one of your published Linkpages.": "Open one of your published Linkpages.",
+  "Digital card": "Digital card",
+  "Open one of your published digital business cards.": "Open one of your published digital business cards.",
+  "Open one of your published forms.": "Open one of your published forms.",
+  "PDF or image": "PDF or image",
+  "Open a PDF or image from your asset library.": "Open a PDF or image from your asset library.",
+  "Dynamic QR: it opens the published item, counts scans and follows later edits to the item.": "Dynamic QR: it opens the published item, counts scans and follows later edits to the item.",
+  "This QR code follows its {{type}}. Edit the item itself to change what people see.": "This QR code follows its {{type}}. Edit the item itself to change what people see."
 }

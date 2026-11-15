@@ -111,5 +111,21 @@
   "Wi-Fi": "Wi-Fi",
   "Your QR code is ready": "رمز QR الخاص بك جاهز",
   "{{size}} px wide": "عرض {{size}} بكسل",
-  "{{type}} content": "محتوى {{type}}"
+  "{{type}} content": "محتوى {{type}}",
+  "Loading": "جارٍ التحميل",
+  "Create one": "أنشئ واحدًا",
+  "Choose what the QR code opens": "اختر ما يفتحه رمز QR",
+  "Publish it first": "انشره أولًا",
+  "No Linkpages yet.": "لا توجد صفحات روابط بعد.",
+  "No cards yet.": "لا توجد بطاقات بعد.",
+  "No forms yet.": "لا توجد نماذج بعد.",
+  "Your library is empty.": "مكتبتك فارغة.",
+  "Open one of your published Linkpages.": "افتح إحدى صفحات الروابط المنشورة.",
+  "Digital card": "بطاقة رقمية",
+  "Open one of your published digital business cards.": "افتح إحدى بطاقات الأعمال الرقمية المنشورة.",
+  "Open one of your published forms.": "افتح أحد النماذج المنشورة.",
+  "PDF or image": "PDF أو صورة",
+  "Open a PDF or image from your asset library.": "افتح ملف PDF أو صورة من مكتبة الملفات.",
+  "Dynamic QR: it opens the published item, counts scans and follows later edits to the item.": "رمز QR ديناميكي: يفتح العنصر المنشور ويحسب المسح ويتبع التعديلات اللاحقة على العنصر.",
+  "This QR code follows its {{type}}. Edit the item itself to change what people see.": "يتبع رمز QR هذا {{type}} الخاص به. عدّل العنصر نفسه لتغيير ما يراه الناس."
 }

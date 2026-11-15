@@ -13,10 +13,13 @@ import {
 } from "@/components/ui/collapsible";
 import { useTranslation } from "react-i18next";
 import { useToast } from "@/hooks/use-toast";
-import ContactCardEditor from "./ContactCardEditor";
+import { LinkedItemPicker } from "./qr-wizard/LinkedItemPicker";
+import { SavedTemplates } from "./qr/SavedTemplates";
+import { isLinkedQRType, linkedLabels } from "@/lib/qr-linked";
 import {
   saveNewQRCode,
   saveNewStaticQRCode,
+  saveNewLinkedQRCode,
   saveQRCodeDesign,
   getQRCode,
   getTrackingUrl,
@@ -55,6 +58,7 @@ import {
   describeQRDestination,
   isStaticQRType,
   qrTypeOf,
+  type QRContent,
 } from "@/lib/qr-content";
 import type { QRAnalyticsResponse, QRCodeRecord } from "@/lib/qr-types";
 import { QRTypeStep, type WizardType } from "./qr-wizard/QRTypeStep";
@@ -180,6 +184,7 @@ const QRGenerator = () => {
   const [step, setStep] = useState<WizardStep>("type");
   const [showErrors, setShowErrors] = useState(false);
   const [url, setUrl] = useState("");
+  const [linked, setLinked] = useState<{ id: string; title: string } | null>(null);
 
   const [trackAnalytics, setTrackAnalytics] = useState(true);
 
@@ -193,10 +198,13 @@ const QRGenerator = () => {
   const templatesScrollRef = useRef<HTMLDivElement>(null);
   const destination = normalizeDestination(url);
   const staticType = isStaticQRType(qrType) ? qrType : null;
+  const linkedKind = isLinkedQRType(qrType) ? qrType : null;
   const contentCheck = staticType ? checkContent(staticType, fields) : null;
   const contentValid = staticType
     ? Boolean(contentCheck?.ok)
-    : qrType === "website" && Boolean(destination);
+    : linkedKind
+      ? Boolean(linked)
+      : qrType === "website" && Boolean(destination);
   const qrValue = record
     ? record.tracking_enabled
       ? getTrackingUrl(record.short_code)
@@ -210,7 +218,7 @@ const QRGenerator = () => {
         : destination || "";
   const designPreviewValue =
     qrValue ||
-    (!record && qrType === "website" && trackAnalytics && destination
+    (!record && ((qrType === "website" && trackAnalytics && destination) || (linkedKind && linked))
       ? getTrackingUrl(previewShortCode)
       : "");
   const trackingShortCode = record?.tracking_enabled ? record.short_code : null;
@@ -247,7 +255,7 @@ const QRGenerator = () => {
           const row = result.qrCode,
             restoredDesign = row.design ?? structuredClone(defaultDesign),
             type = qrTypeOf(row.qr_type),
-            restoredFields = row.content ? fieldsFromContent(row.content) : emptyFields,
+            restoredFields = row.content && isStaticQRType(row.content.type) ? fieldsFromContent(row.content as QRContent) : emptyFields,
             restoredTitle = row.title ?? "";
           setRecord(row);
           setUrl(row.destination_url);
@@ -382,6 +390,8 @@ const QRGenerator = () => {
     try {
       const result = record
         ? await saveQRCodeDesign(record.id, design)
+        : linkedKind && linked
+          ? await saveNewLinkedQRCode(linkedKind, linked.id, title, design)
         : staticType && contentCheck?.ok
           ? await saveNewStaticQRCode(contentCheck.content, title, design)
           : await saveNewQRCode(
@@ -392,7 +402,7 @@ const QRGenerator = () => {
               trackAnalytics,
             );
       const row = result.qrCode;
-      const nextFields = row.content ? fieldsFromContent(row.content) : fields;
+      const nextFields = row.content && isStaticQRType(row.content.type) ? fieldsFromContent(row.content as QRContent) : fields;
       const nextTitle = row.title ?? "";
       setRecord(row);
       setUrl(row.destination_url);
@@ -493,7 +503,7 @@ const QRGenerator = () => {
   const creating = !record;
   const stepIndex = steps.findIndex((item) => item.id === step);
   const typeLabel = creation(
-    { website: "Website", text: "Text", email: "Email", phone: "Phone", sms: "SMS", wifi: "Wi-Fi", contactCard: "Contact card" }[qrType],
+    { website: "Website", text: "Text", email: "Email", phone: "Phone", sms: "SMS", wifi: "Wi-Fi", ...linkedLabels }[qrType],
   );
   const reachable = (target: WizardStep) =>
     creating &&
@@ -544,7 +554,7 @@ const QRGenerator = () => {
 
       {step === "type" && creating ? (
         <div className="space-y-6">
-          <QRTypeStep value={qrType} onSelect={(type) => { setQRType(type); setShowErrors(false); }} />
+          <QRTypeStep value={qrType} onSelect={(type) => { setQRType(type); setLinked(null); setShowErrors(false); }} />
           <div className="flex justify-end">
             <Button size="lg" onClick={() => goTo("content")}>
               {creation("Next")}
@@ -553,18 +563,7 @@ const QRGenerator = () => {
           </div>
         </div>
       ) : step === "content" && creating ? (
-        qrType === "contactCard" ? (
-          <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              {creation("This contact card editor is a local preview. It is not saved or published yet.")}
-            </p>
-            <ContactCardEditor />
-            <Button variant="outline" onClick={() => goTo("type")}>
-              <ChevronLeft className="w-4 h-4 me-2 rtl:rotate-180" aria-hidden="true" />
-              {creation("Back")}
-            </Button>
-          </div>
-        ) : (
+        (
           <form
             noValidate
             onSubmit={(event) => { event.preventDefault(); continueFromContent(); }}
@@ -576,10 +575,17 @@ const QRGenerator = () => {
                 <p className="text-sm text-muted-foreground">
                   {staticType
                     ? creation("Static QR: the content is stored in the pattern and cannot change after printing.")
-                    : creation("Choose dynamic to track scans and change the destination without reprinting.")}
+                    : linkedKind
+                      ? creation("Dynamic QR: it opens the published item, counts scans and follows later edits to the item.")
+                      : creation("Choose dynamic to track scans and change the destination without reprinting.")}
                 </p>
               </div>
-              {qrType === "website" ? (
+              {linkedKind ? (
+                <div className="space-y-2">
+                  <LinkedItemPicker kind={linkedKind} value={linked?.id ?? null} onSelect={setLinked} />
+                  {showErrors && !linked && <p role="alert" className="text-sm text-destructive">{creation("Choose what the QR code opens")}</p>}
+                </div>
+              ) : qrType === "website" ? (
                 <div className="space-y-4">
                   <div className="space-y-1">
                     <label htmlFor="qr-destination" className="text-sm font-medium">
@@ -732,6 +738,10 @@ const QRGenerator = () => {
                       {creation("Static content is stored in the pattern. Create a new QR to change it.")}
                     </p>
                   </>
+                ) : isLinkedQRType(record.qr_type) ? (
+                  <p className="text-sm text-muted-foreground">
+                    {creation("This QR code follows its {{type}}. Edit the item itself to change what people see.", { type: creation(linkedLabels[record.qr_type]) })}
+                  </p>
                 ) : record.tracking_enabled ? (
                   <QRDestinationEditor
                     record={record}
@@ -1140,6 +1150,7 @@ const QRGenerator = () => {
                 </div>
               )}
 
+              {activeCustomTab === "templates" && <SavedTemplates design={design} onApply={setDesign} />}
               {/* Design Section */}
               {/* Logo Section */}
               {activeCustomTab === "logo" && (

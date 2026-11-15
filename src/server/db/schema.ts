@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm';
 import { customType, pgSchema, uuid, text, timestamp, boolean, index, integer, varchar, jsonb, unique, uniqueIndex, primaryKey, foreignKey } from 'drizzle-orm/pg-core';
 import type { QRDesign } from '@/lib/qr-design';
 import type { QRContent } from '@/lib/qr-content';
+import type { LinkedContent } from '@/lib/qr-linked';
 
 export const appSchema = pgSchema('qrconnect');
 const createdAt = () => timestamp('created_at', { withTimezone: true }).defaultNow().notNull();
@@ -76,7 +77,9 @@ export const qrCodes = appSchema.table('qr_codes', {
   title: varchar('title', { length: 255 }),
   qrType: varchar('qr_type', { length: 50 }).notNull().default('website'),
   design: jsonb('design').$type<QRDesign>(),
-  content: jsonb('content').$type<QRContent>(),
+  /** Account that created the code; null for codes created before organizations or by deleted accounts. */
+  createdBy: uuid('created_by').references(() => user.id, { onDelete: 'set null' }),
+  content: jsonb('content').$type<QRContent | LinkedContent>(),
   trackingEnabled: boolean('tracking_enabled').notNull().default(true),
   isActive: boolean('is_active').notNull().default(true),
   folderId: uuid('folder_id').references(() => qrFolders.id, { onDelete: 'set null' }),
@@ -340,3 +343,13 @@ export const workspaceInvitations = appSchema.table('workspace_invitations', {
   acceptedAt: timestamp('accepted_at', { withTimezone: true }),
   revokedAt: timestamp('revoked_at', { withTimezone: true }),
 }, table => [index('workspace_invitations_workspace_idx').on(table.workspaceId)]).enableRLS();
+
+/** Designs saved by a workspace for reuse in the QR editor. */
+export const qrTemplates = appSchema.table('qr_templates', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+  name: varchar('name', { length: 60 }).notNull(),
+  design: jsonb('design').notNull(),
+  createdBy: uuid('created_by').references(() => user.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, table => [index('qr_templates_user_created_idx').on(table.userId, table.createdAt)]).enableRLS();

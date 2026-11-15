@@ -97,9 +97,9 @@ export const isStaticQRType = (value: string): value is StaticQRType =>
 export const qrTypeOf = (value: string): CreatableQRType => (isStaticQRType(value) ? value : "website");
 
 /** Text safe to show in lists without exposing a Wi-Fi password. */
-export function describeQRDestination(record: { qr_type: string; destination_url: string; content?: QRContent | null }) {
+export function describeQRDestination(record: { qr_type: string; destination_url: string; content?: QRContent | { type: string; id: string } | null }) {
   const content = record.content;
-  if (content?.type === "wifi") return `Wi-Fi · ${content.ssid}`;
+  if (content?.type === "wifi" && "ssid" in content) return `Wi-Fi · ${content.ssid}`;
   return record.destination_url;
 }
 

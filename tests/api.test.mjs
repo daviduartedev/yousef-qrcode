@@ -1654,3 +1654,90 @@ test("invitations are bound to the invited email, can be revoked and never leak 
   const list = await (await request("/api/workspaces", { cookie: invited.session })).json();
   assert.deepEqual(list.workspaces.map((item) => [item.kind, item.role]).sort(), [["organization", "viewer"], ["personal", "owner"]]);
 });
+
+test("linked QR codes open published pages, cards, forms and library files and follow them", async () => {
+  const owner = await register();
+  const other = await register();
+  const page = await newLinkpage(owner, "business");
+  await request(`/api/linkpages/${page.id}/publish`, { method: "POST", cookie: owner, body: { publish: true } });
+  const draftForm = await newForm(owner, "contact");
+  const foreignCard = await newCard(other);
+  await request(`/api/cards/${foreignCard.id}/publish`, { method: "POST", cookie: other, body: { publish: true } });
+
+  const created = await request("/api/qr-codes", { method: "POST", cookie: owner, body: { link: { kind: "linkpage", id: page.id }, design: savedDesign } });
+  assert.equal(created.status, 201);
+  const qr = (await created.json()).qrCode;
+  assert.equal(qr.qr_type, "linkpage");
+  assert.equal(qr.destination_url, `${base}/p/${page.slug}`);
+  assert.equal(qr.tracking_enabled, true);
+  assert.equal(qr.title, page.title);
+  assert.ok(qr.created_by, "the creator is recorded");
+  const scan = await request(`/qr?code=${qr.short_code}`);
+  assert.equal(scan.headers.get("location"), `${base}/p/${page.slug}`);
+  assert.equal((await request(`/api/qr-codes/${qr.id}`, { method: "PATCH", cookie: owner, body: { destination_url: "https://example.test/elsewhere" } })).status, 409, "linked codes follow their item");
+  assert.equal((await request("/api/qr-codes", { method: "POST", cookie: owner, body: { link: { kind: "form", id: draftForm.id } } })).status, 400, "unpublished items cannot be linked");
+  assert.equal((await request("/api/qr-codes", { method: "POST", cookie: owner, body: { link: { kind: "card", id: foreignCard.id } } })).status, 400, "items of another workspace cannot be linked");
+  assert.equal((await request("/api/qr-codes", { method: "POST", cookie: owner, body: { link: { kind: "linkpage", id: page.id }, destination_url: "https://evil.example/" } })).status, 400);
+
+  const { asset } = await (await uploadFile(owner, Buffer.from("%PDF-1.4\n%%EOF\n"), "menu.pdf")).json();
+  const fileQr = (await (await request("/api/qr-codes", { method: "POST", cookie: owner, body: { link: { kind: "file", id: asset.id } } })).json()).qrCode;
+  const publicUrl = new URL(fileQr.destination_url);
+  assert.match(publicUrl.pathname, /^\/a\/[0-9a-f-]{36}\/[A-Za-z0-9_-]{32}$/);
+  const file = await request(publicUrl.pathname);
+  assert.equal(file.status, 200, "the file opens without a session");
+  assert.equal(file.headers.get("content-type"), "application/pdf");
+  assert.equal((await request(publicUrl.pathname.replace(/.$/, (c) => (c === "A" ? "B" : "A")))).status, 404, "a forged signature is refused");
+  await request(`/api/qr-codes/${fileQr.id}`, { method: "PATCH", cookie: owner, body: { is_active: false } });
+  assert.equal((await request(publicUrl.pathname)).status, 404, "pausing the only file QR revokes the public file");
+  await request(`/api/qr-codes/${fileQr.id}`, { method: "PATCH", cookie: owner, body: { is_active: true } });
+  assert.equal((await request(publicUrl.pathname)).status, 200);
+  const removedAsset = await (await request(`/api/assets/${asset.id}`, { method: "DELETE", cookie: owner })).json();
+  assert.equal(removedAsset.qr_codes_deactivated, 1);
+  assert.equal((await request(publicUrl.pathname)).status, 404, "deleting the file ends the public address");
+  assert.equal((await request(`/api/linkpages/${page.id}`, { method: "DELETE", cookie: owner })).status, 200);
+  assert.equal((await (await request(`/api/qr-codes/${qr.id}`, { cookie: owner })).json()).qrCode.is_active, false, "deleting the page deactivates codes linked to it");
+  assert.equal((await request("/api/qr-codes", { method: "POST", cookie: owner, body: { qr_type: "file", destination_url: "https://evil.example/" } })).status, 400, "linked types need an item");
+});
+
+test("a decoded QR image finds its code only in the current workspace", async () => {
+  const owner = await register();
+  const other = await register();
+  const tracked = (await (await request("/api/qr-codes", { method: "POST", cookie: owner, body: { title: "Tracked poster", destination_url: "https://example.test/poster" } })).json());
+  const found = await request("/api/qr-codes/lookup", { method: "POST", cookie: owner, body: { data: tracked.trackingUrl } });
+  assert.equal(found.status, 200);
+  assert.equal((await found.json()).id, tracked.qrCode.id);
+  const wifi = (await (await request("/api/qr-codes", { method: "POST", cookie: owner, body: { content: { type: "text", text: "Hello table 4" } } })).json()).qrCode;
+  assert.equal((await (await request("/api/qr-codes/lookup", { method: "POST", cookie: owner, body: { data: "Hello table 4" } })).json()).id, wifi.id);
+  assert.equal((await request("/api/qr-codes/lookup", { method: "POST", cookie: other, body: { data: tracked.trackingUrl } })).status, 404);
+  assert.equal((await request("/api/qr-codes/lookup", { method: "POST", cookie: owner, body: { data: "https://unknown.example/" } })).status, 404);
+});
+
+test("saved design templates belong to the workspace and keep library logos private", async () => {
+  const owner = await register();
+  const other = await register();
+  const { asset } = await (await uploadFile(owner, tinyPng, "logo.png")).json();
+  const { asset: foreign } = await (await uploadFile(other, tinyPng, "logo.png")).json();
+  const saved = await request("/api/qr-templates", { method: "POST", cookie: owner, body: { name: "Brand blue", design: { ...savedDesign, logoId: null, logoAssetId: asset.id } } });
+  assert.equal(saved.status, 201);
+  const template = (await saved.json()).template;
+  assert.equal((await request("/api/qr-templates", { method: "POST", cookie: owner, body: { name: "Stolen", design: { ...savedDesign, logoAssetId: foreign.id } } })).status, 400);
+  assert.equal((await request("/api/qr-templates", { method: "POST", cookie: owner, body: { name: "", design: savedDesign } })).status, 400);
+  assert.deepEqual((await (await request("/api/qr-templates", { cookie: owner })).json()).templates.map((item) => item.name), ["Brand blue"]);
+  assert.deepEqual((await (await request("/api/qr-templates", { cookie: other })).json()).templates, []);
+  assert.equal((await request(`/api/qr-templates/${template.id}`, { method: "DELETE", cookie: other })).status, 404);
+  assert.equal((await request(`/api/qr-templates/${template.id}`, { method: "DELETE", cookie: owner })).status, 200);
+});
+
+test("the created-by-me filter separates members' codes in a shared workspace", async () => {
+  const owner = await person();
+  const member = await person();
+  const org = (await (await request("/api/workspaces", { method: "POST", cookie: owner.session, body: { name: "Shared" } })).json()).workspace;
+  await useWorkspace(owner, org.id);
+  await inviteAndAccept(owner, member, "editor");
+  await request("/api/qr-codes", { method: "POST", cookie: owner.cookie, body: { title: "Owner code", destination_url: "https://example.test/o" } });
+  await request("/api/qr-codes", { method: "POST", cookie: member.cookie, body: { title: "Member code", destination_url: "https://example.test/m" } });
+  const titles = async (cookie, query) => (await (await request(`/api/qr-codes?page=1${query}`, { cookie })).json()).qrCodes.map((qr) => qr.title).sort();
+  assert.deepEqual(await titles(owner.cookie, ""), ["Member code", "Owner code"]);
+  assert.deepEqual(await titles(owner.cookie, "&creator=me"), ["Owner code"]);
+  assert.deepEqual(await titles(member.cookie, "&creator=me"), ["Member code"]);
+});

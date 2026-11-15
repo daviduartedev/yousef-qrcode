@@ -11,5 +11,22 @@
   "matchCount_many": "{{count}} اقتراحًا",
   "matchCount_other": "{{count}} اقتراح",
   "viewAll": "اعرض كل النتائج",
-  "untitled": "رمز QR بلا عنوان"
+  "untitled": "رمز QR بلا عنوان",
+  "No QR code was found in this image.": "لم يُعثر على رمز QR في هذه الصورة.",
+  "This QR code is not in the current workspace.": "رمز QR هذا ليس في مساحة العمل الحالية.",
+  "The image could not be read.": "تعذّرت قراءة الصورة.",
+  "Design saved to your templates.": "تم حفظ التصميم في قوالبك.",
+  "Delete the template \"{{name}}\"? QR codes that used it keep their design.": "حذف القالب \"{{name}}\"؟ تحتفظ رموز QR التي استخدمته بتصميمها.",
+  "Your templates": "قوالبك",
+  "Save a design to reuse it on other QR codes of this workspace.": "احفظ تصميمًا لإعادة استخدامه في رموز QR أخرى في مساحة العمل هذه.",
+  "Apply {{name}}": "تطبيق {{name}}",
+  "Delete {{name}}": "حذف {{name}}",
+  "Template name": "اسم القالب",
+  "Save current design": "حفظ التصميم الحالي",
+  "Find by image": "البحث بالصورة",
+  "Reading image…": "جارٍ قراءة الصورة…",
+  "Enter a name and a valid design": "أدخل اسمًا وتصميمًا صالحًا",
+  "You reached the template limit. Delete a template to save another.": "وصلت إلى الحد الأقصى للقوالب. احذف قالبًا لحفظ آخر.",
+  "Template not found": "القالب غير موجود",
+  "The selected logo is not in your library": "الشعار المحدد ليس في مكتبتك"
 }

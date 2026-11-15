@@ -2,6 +2,7 @@ import type { QRAnalyticsResponse, QRCodeRecord, QRDestinationChange } from "./q
 import type { QRContent } from "./qr-content";
 import type { QRDesign } from "./qr-design";
 import { workspaceHeaders } from "@/lib/workspace-client";
+import type { LinkedQRKind } from "@/lib/qr-linked";
 
 export class QRRequestError extends Error {
   constructor(public readonly status: number) {
@@ -50,6 +51,13 @@ export function saveNewStaticQRCode(content: QRContent, title: string, design: Q
       ...(title.trim() ? { title: Array.from(title.trim()).slice(0, 255).join("") } : {}),
       design,
     }),
+  });
+}
+/** A QR that opens a published Linkpage, card or form, or a library file; the server derives the address. */
+export function saveNewLinkedQRCode(kind: LinkedQRKind, id: string, title: string, design: QRDesign) {
+  return api<SavedQRCode>("/api/qr-codes", {
+    method: "POST",
+    body: JSON.stringify({ link: { kind, id }, ...(title.trim() ? { title: Array.from(title.trim()).slice(0, 255).join("") } : {}), design }),
   });
 }
 export function changeQRDestination(id: string, destinationUrl: string) {

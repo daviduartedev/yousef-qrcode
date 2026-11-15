@@ -7,5 +7,22 @@
   "matchCount_one": "{{count}} suggestion",
   "matchCount_other": "{{count}} suggestions",
   "viewAll": "View all results",
-  "untitled": "Untitled QR Code"
+  "untitled": "Untitled QR Code",
+  "No QR code was found in this image.": "No QR code was found in this image.",
+  "This QR code is not in the current workspace.": "This QR code is not in the current workspace.",
+  "The image could not be read.": "The image could not be read.",
+  "Design saved to your templates.": "Design saved to your templates.",
+  "Delete the template \"{{name}}\"? QR codes that used it keep their design.": "Delete the template \"{{name}}\"? QR codes that used it keep their design.",
+  "Your templates": "Your templates",
+  "Save a design to reuse it on other QR codes of this workspace.": "Save a design to reuse it on other QR codes of this workspace.",
+  "Apply {{name}}": "Apply {{name}}",
+  "Delete {{name}}": "Delete {{name}}",
+  "Template name": "Template name",
+  "Save current design": "Save current design",
+  "Find by image": "Find by image",
+  "Reading image…": "Reading image…",
+  "Enter a name and a valid design": "Enter a name and a valid design",
+  "You reached the template limit. Delete a template to save another.": "You reached the template limit. Delete a template to save another.",
+  "Template not found": "Template not found",
+  "The selected logo is not in your library": "The selected logo is not in your library"
 }

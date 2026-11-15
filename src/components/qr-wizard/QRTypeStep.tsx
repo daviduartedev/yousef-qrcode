@@ -17,8 +17,9 @@ import {
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { CreatableQRType } from "@/lib/qr-content";
+import type { LinkedQRKind } from "@/lib/qr-linked";
 
-export type WizardType = CreatableQRType | "contactCard";
+export type WizardType = CreatableQRType | LinkedQRKind;
 
 const available: { type: WizardType; icon: LucideIcon; label: string; hint: string }[] = [
   { type: "website", icon: Globe, label: "Website", hint: "Open a web page. Choose dynamic to track scans and change the destination later." },
@@ -27,14 +28,14 @@ const available: { type: WizardType; icon: LucideIcon; label: string; hint: stri
   { type: "phone", icon: Phone, label: "Phone", hint: "Call a phone number." },
   { type: "sms", icon: MessageSquare, label: "SMS", hint: "Start a text message to a number." },
   { type: "wifi", icon: Wifi, label: "Wi-Fi", hint: "Join a Wi-Fi network without typing the password." },
-  { type: "contactCard", icon: Contact, label: "Contact card", hint: "Local preview editor. Publishing cards arrives with the Cards module." },
+  { type: "linkpage", icon: Link2, label: "Linkpage", hint: "Open one of your published Linkpages." },
+  { type: "card", icon: Contact, label: "Digital card", hint: "Open one of your published digital business cards." },
+  { type: "form", icon: FileInput, label: "Form", hint: "Open one of your published forms." },
+  { type: "file", icon: FileText, label: "PDF or image", hint: "Open a PDF or image from your asset library." },
 ];
 const upcoming: { icon: LucideIcon; label: string }[] = [
-  { icon: Link2, label: "Linkpage" },
-  { icon: FileText, label: "PDF" },
   { icon: AppWindow, label: "App download" },
   { icon: MapPin, label: "Location" },
-  { icon: FileInput, label: "Form" },
 ];
 
 export function QRTypeStep({ value, onSelect }: { value: WizardType; onSelect: (type: WizardType) => void }) {
