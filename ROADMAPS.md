@@ -1,6 +1,6 @@
 # Roadmaps — QRConnect
 
-Planejamento original de 01/11/2026, com estado atualizado em 15/11/2026 (Lote 6 incluído). Os PRs #5 e #10 entregaram a base e o editor. Os PRs #16 e #17 integraram o preparo operacional, o Neon e a correção de build para a Vercel. O [PR #25](https://github.com/daviduartedev/yousef-qrcode/pull/25) integrou o Lote 4 validado (#19–#24). As especificações pai #1 e #6 permanecem abertas intencionalmente.
+Planejamento original de 01/11/2026, com estado atualizado em 15/11/2026 (Lotes 6 e 7 incluídos). Os PRs #5 e #10 entregaram a base e o editor. Os PRs #16 e #17 integraram o preparo operacional, o Neon e a correção de build para a Vercel. O [PR #25](https://github.com/daviduartedev/yousef-qrcode/pull/25) integrou o Lote 4 validado (#19–#24). As especificações pai #1 e #6 permanecem abertas intencionalmente.
 
 Os Lotes 1 e 2 tiveram validação humana local. A [homologação](https://yousef-xi.vercel.app/) recebeu aceite do proprietário em 11/11/2026 com base nos testes hospedados de cadastro, login, isolamento, logout e tracking. O proprietário dispensou a rodada manual hospedada de reabertura do design, PNG/SVG e leitura no celular.
 
@@ -29,7 +29,7 @@ R4 e R5 são independentes entre si. A ordem pode seguir a prioridade comercial.
 | R0 | Banco de homologação provisionado e recuperação local aceita. Backup, retenção e restauração hospedada adiados no #12. |
 | R1 | Homologação Vercel + Neon aceita no #13 com evidência HTTP e dispensa da rodada manual. |
 | R2 | Editor entregue/validado; publicação e retorno operacional pendentes; ponte antiga dispensada. |
-| R3 | Painel e gestão inicial do Lote 4 (#19–#24) aceitos e integrados. O [Lote 5](docs/lotes/05-gestao-avancada/spec.md) entregou navegação e gestão avançada na `main` em `f0c6f61`. CI e deploy na Vercel passaram, com a migração `0004` verificada no Neon de homologação. O [Lote 6](docs/lotes/06-criacao-e-detalhe/spec.md) entrega o assistente de criação, os tipos estáticos independentes, o download configurável e a troca de destino com histórico. |
+| R3 | Painel e gestão inicial do Lote 4 (#19–#24) aceitos e integrados. O [Lote 5](docs/lotes/05-gestao-avancada/spec.md) entregou navegação e gestão avançada na `main` em `f0c6f61`. CI e deploy na Vercel passaram, com a migração `0004` verificada no Neon de homologação. O [Lote 6](docs/lotes/06-criacao-e-detalhe/spec.md) entrega o assistente de criação, os tipos estáticos independentes, o download configurável e a troca de destino com histórico (PR #26, homologação com migração `0005`). O [Lote 7](docs/lotes/07-analytics-ciclo-de-vida/spec.md) entrega o analytics consolidado e o ciclo de vida. |
 | R4–R5 | Módulos publicados/persistidos ainda não entregues; abas/editor local herdados não os substituem. |
 | R6 | Superfícies principais mapeadas no trial. Regras e fluxos restritos a planos superiores precisam de evidência própria. |
 
@@ -130,7 +130,7 @@ A busca por imagem de QR, os filtros por ciclo de vida e proprietário e os atal
 - [x] Introduzir menu lateral e navegação entre visão geral, QR Codes e estatísticas básicas por código no Lote 4.
 - [x] Entregar gaveta mobile e busca global por texto no Lote 5.
 - [ ] Integrar alternância QR Codes/Cards, atalhos de Analytics e Templates e busca por imagem quando houver contrato e módulos disponíveis.
-- [ ] Mapear estados do ciclo de vida e alinhar a composição da Visão geral com conta vazia e com atividade.
+- [x] Mapear estados do ciclo de vida (novo, ativo, em queda, sem scans, pausado) e ligá-los da Visão geral à lista filtrada (Lote 7).
 - [x] Implementar o fluxo de criação em etapas: tipo, conteúdo, personalização e conclusão (Lote 6).
 - [x] Explicitar QR estático e dinâmico e implementar o conteúdo específico de cada tipo oferecido: Website, Texto, E-mail, Telefone, SMS e Wi-Fi no Lote 6. Tipos que dependem de Linkpages, Cards, Forms e mídia seguem no Lote 14.
 - [x] Adicionar busca, filtros, paginação e ações de edição, ativação, desativação e exclusão no Lote 4.
@@ -139,9 +139,9 @@ A busca por imagem de QR, os filtros por ciclo de vida e proprietário e os atal
 - [x] Entregar a etapa final de download com PNG/SVG, larguras de 512 a 2048 px e correção de erros L/M/Q/H decodificados nos testes (Lote 6).
 - [ ] Galeria de templates salvos pelo usuário, Auto Design e formatos PDF/EPS. O catálogo de templates existente é usado na etapa de design.
 - [x] Permitir alterar o destino de um QR dinâmico preservando a URL pública e os scans, com histórico privado (Lote 6).
-- [ ] Implementar analytics por QR e visão consolidada, com filtro de período, dispositivos e localização aproximada disponível.
-- [ ] Definir o significado de scanner único e o tratamento de bots e acessos repetidos antes de apresentar essa métrica.
-- [ ] Agregar estatísticas no servidor, controlar duplicações de eventos e acrescentar exportação dos dados definidos para a entrega.
+- [x] Implementar analytics por QR e visão consolidada, com filtro de período, dispositivos e país (Lote 7). Cidade depende de proxy confiável.
+- [x] Definir o significado de scanner único e o tratamento de bots e acessos repetidos antes de apresentar essa métrica (Lote 7). Retenção automática segue para decisão do proprietário.
+- [x] Agregar estatísticas no servidor, controlar duplicações de eventos e acrescentar exportação CSV protegida (Lote 7).
 
 **Conclusão:** usuário encontra e gerencia os próprios QR Codes e consulta métricas verificáveis; alterações de destino não exigem reimpressão de códigos dinâmicos.
 

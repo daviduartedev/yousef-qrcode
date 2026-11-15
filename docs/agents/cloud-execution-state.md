@@ -6,24 +6,27 @@ Checkpoint persistente da execução dos lotes do [roteiro na nuvem](execucao-ro
 
 | Item | Valor |
 |---|---|
-| Último lote verificado localmente | 6 — [assistente de criação, tipos estáticos, detalhe e download](../lotes/06-criacao-e-detalhe/spec.md) |
-| Branch do lote | `feat/lote-06-criacao-e-detalhe` (base `85e425c`) |
-| Integração na `main` | pendente: PR com CI e migração `0005` no Neon de homologação |
-| Próximo lote | 7 — Analytics e ciclo de vida no Overview (P03, P13), depende do 6 |
-| Lotes paralelos possíveis | 8 (site público e entrada) e 9 (biblioteca de arquivos; exige armazenamento persistente compatível com a Vercel) |
+| Último lote integrado na `main` | 6 — PR #26, merge `e905477` (commit do lote `c1f19fb`); deploy da Vercel concluído; migração `0005` aplicada e verificada no Neon de homologação |
+| Lote em integração | 7 — branch `feat/lote-07-analytics-ciclo-de-vida`, sem migração |
+| Próximo lote | 8 — site público e entrada (P01, P02); independe de 6 e 7 |
+| Depois | 9 — biblioteca de arquivos; exige armazenamento de objetos compatível com a Vercel e credencial de teste autorizada |
 
 ## Lotes
 
 | Lote | Estado | Commit | Testes | Deploy |
 |---|---|---|---|---|
 | 1–5 | Integrados antes desta execução | `f0c6f61` | ver especificações | homologação |
-| 6 | Implementado e verificado localmente | ver histórico da branch | unit 5/5, API 23/23, ops 4/4, navegador 21/21, upgrade `0004→0005` ok | pendente |
-| 7–20 | Não iniciados | — | — | — |
+| 6 | Integrado e verificado | `c1f19fb`, merge `e905477` | unit 5/5, API 23/23, ops 4/4, navegador 21/21, upgrade `0004→0005` ok, CI verde | Vercel ok; smoke HTTP sem sessão ok; fluxos autenticados hospedados aguardam conta autorizada |
+| 7 | Verificado localmente; ver o PR do lote | ver histórico | unit 9/9, API 26/26, ops 4/4, navegador 12/12 | após merge |
+| 8–20 | Não iniciados | — | — | — |
 
 ## Bloqueios e pendências
 
 - Comparação direta com o trial da Uniqode: o trial pede login no executor. Usar a auditoria arquivada e a ajuda oficial; registrar lacunas por lote.
 - Produção (#15), recuperação hospedada (#12), DNS real, cobrança real e mensagens a terceiros estão fora da autorização.
+- Testes autenticados na homologação exigem conta autorizada pelo proprietário (AGENTS.md). Até lá, a verificação hospedada é HTTP sem sessão.
+- Confirmar `TRUST_PROXY_HEADERS=true` na Vercel de homologação para ativar scanners únicos e deduplicação (Lote 7).
+- Defeito anterior: erro de hidratação React #418 em `/overview` no build de produção (existe na `main` antes do Lote 7).
 - Lote 9 precisa de um provedor de armazenamento de objetos para a Vercel e credencial de teste autorizada; sem isso, só a parte local pode ser entregue.
 
 ## Como retomar

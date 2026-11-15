@@ -1,3 +1,5 @@
+import { lifecycleStates, type LifecycleState } from './qr-analytics';
+
 export const qrPageSize = 20;
 export const qrBulkLabelLimit = 20;
 
@@ -30,9 +32,10 @@ export type QRListQuery = {
   label: string;
   watch: '' | 'yes' | 'no';
   focus: string;
+  lifecycle: '' | LifecycleState;
 };
 
-export const qrListKeys = ['page', 'q', 'mode', 'status', 'view', 'sort', 'rules', 'folder', 'label', 'watch', 'focus'];
+export const qrListKeys = ['page', 'q', 'mode', 'status', 'view', 'sort', 'rules', 'folder', 'label', 'watch', 'focus', 'lifecycle'];
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const idParam = (value: string | null) => value && uuidPattern.test(value) ? value.toLowerCase() : '';
 export const normalizeQRDigits = (value: string) => value.replace(/[٠-٩۰-۹]/g, digit =>
@@ -77,6 +80,7 @@ export function readQRListQuery(params: Pick<URLSearchParams, 'get'>): QRListQue
   const sort = params.get('sort');
   const watch = params.get('watch');
   const focus = idParam(params.get('focus'));
+  const lifecycle = params.get('lifecycle');
   return {
     page: Number.isSafeInteger(page) && page > 0 ? page : 1,
     q: (params.get('q') ?? '').replaceAll('\0', '').trim().slice(0, 2048),
@@ -89,11 +93,12 @@ export function readQRListQuery(params: Pick<URLSearchParams, 'get'>): QRListQue
     label: idParam(params.get('label')),
     watch: watch === 'yes' || watch === 'no' ? watch : '',
     focus,
+    lifecycle: (lifecycleStates as readonly string[]).includes(lifecycle ?? '') ? lifecycle as LifecycleState : '',
   };
 }
 
 export const hasQRFilters = (query: QRListQuery) => Boolean(
-  query.q || query.mode || query.status || query.rules.length || query.folder || query.label || query.watch || query.focus,
+  query.q || query.mode || query.status || query.rules.length || query.folder || query.label || query.watch || query.focus || query.lifecycle,
 );
 
 export function clearQRFilters(query: QRListQuery): QRListQuery {
@@ -112,6 +117,7 @@ export function qrListHref(query: QRListQuery) {
   if (query.label) params.set('label', query.label);
   if (query.watch) params.set('watch', query.watch);
   if (query.focus) params.set('focus', query.focus);
+  if (query.lifecycle) params.set('lifecycle', query.lifecycle);
   if (query.page > 1) params.set('page', String(query.page));
   const search = params.toString();
   return search ? `/my-qrcodes?${search}` : '/my-qrcodes';

@@ -461,6 +461,9 @@ const MyQRCodes = ({ query, result, origin, organization }: {
                       <QRCodeOrganization qr={qr} organization={organization} busy={busy} onChange={body => organize(qr, body)} />
                       {qr.tracking_enabled && <div className="mb-6 rounded-lg bg-card p-4 shadow-sm">
                         <QRDestinationEditor record={qr} onChanged={refresh} />
+                        <Link href={'/analytics?qr=' + encodeURIComponent(qr.id)} className="mt-3 inline-flex min-h-11 items-center text-sm font-medium text-primary hover:underline">
+                          {copy('Open analytics')}
+                        </Link>
                       </div>}
                       {/* QR Code Preview Section */}
                       <div className="mb-6 p-4 bg-card rounded-lg shadow-sm">

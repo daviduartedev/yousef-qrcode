@@ -9,6 +9,8 @@ import enWorkspace from './locales/workspace.en.json';
 import arWorkspace from './locales/workspace.ar.json';
 import enCreation from './locales/creation.en.json';
 import arCreation from './locales/creation.ar.json';
+import enAnalytics from './locales/analytics.en.json';
+import arAnalytics from './locales/analytics.ar.json';
 
 i18n
   .use(initReactI18next)
@@ -19,12 +21,14 @@ i18n
         copy: enCopy,
         workspace: enWorkspace,
         creation: enCreation,
+        analytics: enAnalytics,
       },
       ar: {
         translation: arTranslations,
         copy: arCopy,
         workspace: arWorkspace,
         creation: arCreation,
+        analytics: arAnalytics,
       },
     },
     lng: 'en',
