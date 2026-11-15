@@ -1,10 +1,10 @@
-import { requirePageSession } from '@/server/session';
+import { requirePageWorkspace } from '@/server/workspace-session';
 import { getQROverview } from '@/server/analytics';
 import Overview from '@/views/Overview';
 
 export const runtime = 'nodejs';
 
 export default async function OverviewPage() {
-  const { user } = await requirePageSession('/overview');
-  return <Overview data={await getQROverview(user.id)} />;
+  const { workspace } = await requirePageWorkspace('/overview');
+  return <Overview data={await getQROverview(workspace.id)} />;
 }

@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { requirePageSession } from '@/server/session';
+import { requirePageWorkspace } from '@/server/workspace-session';
 import { listForms } from '@/server/forms';
 import { getServerEnv } from '@/server/env';
 import Forms from '@/views/Forms';
@@ -8,6 +8,6 @@ export const runtime = 'nodejs';
 export const metadata: Metadata = { title: 'Forms', robots: { index: false } };
 
 export default async function FormsPage() {
-  const { user } = await requirePageSession('/forms');
-  return <Forms forms={await listForms(user.id)} origin={getServerEnv().appUrl} />;
+  const { workspace } = await requirePageWorkspace('/forms');
+  return <Forms forms={await listForms(workspace.id)} origin={getServerEnv().appUrl} />;
 }

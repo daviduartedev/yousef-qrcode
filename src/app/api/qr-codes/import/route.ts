@@ -1,4 +1,5 @@
-import { apiError, privateHeaders, requireApiUser, requireSameOrigin } from "@/server/http";
+import { apiError, privateHeaders, requireSameOrigin } from "@/server/http";
+import { requireApiWorkspace } from "@/server/workspace-session";
 import { importQrCodes } from "@/server/qr-import";
 
 export const runtime = "nodejs";
@@ -6,8 +7,8 @@ export const runtime = "nodejs";
 export async function POST(request: Request) {
   try {
     requireSameOrigin(request);
-    const user = await requireApiUser(request);
-    const result = await importQrCodes(user.id, request);
+    const workspace = await requireApiWorkspace(request);
+    const result = await importQrCodes(workspace.id, request);
     return Response.json(result, { headers: privateHeaders });
   } catch (error) {
     return apiError(error);

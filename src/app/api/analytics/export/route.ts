@@ -1,13 +1,14 @@
 import { analyticsCsv } from '@/server/analytics';
 import { readAnalyticsQuery } from '@/lib/qr-analytics';
-import { apiError, privateHeaders, requireApiUser } from '@/server/http';
+import { apiError, privateHeaders } from '@/server/http';
+import { requireApiWorkspace } from '@/server/workspace-session';
 export const runtime = 'nodejs';
 
 export async function GET(request: Request) {
   try {
-    const user = await requireApiUser(request);
+    const workspace = await requireApiWorkspace(request);
     const query = readAnalyticsQuery(new URL(request.url).searchParams);
-    return new Response('﻿' + await analyticsCsv(user.id, query), {
+    return new Response('﻿' + await analyticsCsv(workspace.id, query), {
       headers: {
         ...privateHeaders,
         'Content-Type': 'text/csv; charset=utf-8',

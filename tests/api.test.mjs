@@ -1532,3 +1532,110 @@ test("form submissions are rate limited and size limited", async () => {
   assert.equal(data.stats.submits, 30);
   assert.equal(data.responses.length, 30);
 });
+
+async function person() {
+  const profile = account();
+  const response = await request("/api/auth/sign-up/email", { method: "POST", body: profile });
+  assert.equal(response.status, 200);
+  return { email: profile.email, session: cookieOf(response), cookie: cookieOf(response) };
+}
+/** Switches the active workspace; the workspace cookie is added to the session cookie. */
+async function useWorkspace(member, workspaceId) {
+  const response = await request("/api/workspaces/active", { method: "POST", cookie: member.session, body: { id: workspaceId } });
+  if (response.status !== 200) return response.status;
+  member.cookie = `${member.session}; ${response.headers.getSetCookie()[0].split(";")[0]}`;
+  return 200;
+}
+async function inviteAndAccept(owner, member, role) {
+  const invite = await request("/api/workspaces/current/invitations", { method: "POST", cookie: owner.cookie, body: { email: member.email, role } });
+  assert.equal(invite.status, 201);
+  const { url } = await invite.json();
+  const token = url.split("/invite/")[1];
+  const accepted = await request("/api/invitations/accept", { method: "POST", cookie: member.session, body: { token } });
+  assert.equal(accepted.status, 200);
+  member.cookie = `${member.session}; ${accepted.headers.getSetCookie()[0].split(";")[0]}`;
+  return token;
+}
+
+test("organizations share content by role, and removing a member ends access immediately", async () => {
+  const owner = await person();
+  const editor = await person();
+  const viewer = await person();
+  const outsider = await person();
+  const created = await request("/api/workspaces", { method: "POST", cookie: owner.session, body: { name: "Acme Marketing" } });
+  assert.equal(created.status, 201);
+  const org = (await created.json()).workspace;
+  assert.equal(await useWorkspace(outsider, org.id), 404, "non-members cannot select the organization");
+  assert.equal(await useWorkspace(owner, org.id), 200);
+
+  const orgQr = await request("/api/qr-codes", { method: "POST", cookie: owner.cookie, body: { title: "Org poster", destination_url: "https://example.test/org" } });
+  assert.equal(orgQr.status, 201);
+  const orgQrId = (await orgQr.json()).qrCode.id;
+  const personal = await request("/api/qr-codes", { method: "POST", cookie: owner.session, body: { title: "Personal flyer", destination_url: "https://example.test/me" } });
+  assert.equal(personal.status, 201);
+  const titles = async (cookie) => (await (await request("/api/qr-codes?page=1", { cookie })).json()).qrCodes.map((qr) => qr.title);
+  assert.deepEqual(await titles(owner.cookie), ["Org poster"]);
+  assert.deepEqual(await titles(owner.session), ["Personal flyer"], "personal workspace stays separate");
+
+  const editorToken = await inviteAndAccept(owner, editor, "editor");
+  await inviteAndAccept(owner, viewer, "viewer");
+  assert.deepEqual(await titles(editor.cookie), ["Org poster"]);
+  const linkpage = await request("/api/linkpages", { method: "POST", cookie: editor.cookie, body: { template: "blank", creation_key: randomUUID() } });
+  assert.equal(linkpage.status, 201, "editors create content in the organization");
+  assert.equal((await (await request("/api/linkpages", { cookie: owner.cookie })).json()).linkpages.length, 1, "owners see what editors create");
+  assert.equal((await request("/api/invitations/accept", { method: "POST", cookie: editor.session, body: { token: editorToken } })).status, 404, "a link works once");
+
+  assert.deepEqual(await titles(viewer.cookie), ["Org poster"], "viewers read");
+  assert.equal((await request("/api/qr-codes", { method: "POST", cookie: viewer.cookie, body: { title: "x", destination_url: "https://example.test/" } })).status, 403);
+  assert.equal((await request(`/api/qr-codes/${orgQrId}`, { method: "DELETE", cookie: viewer.cookie })).status, 403);
+  assert.equal((await request("/api/workspaces/current/invitations", { method: "POST", cookie: viewer.cookie, body: { email: "x@example.test", role: "viewer" } })).status, 403);
+  assert.equal((await request("/api/workspaces/current/invitations", { method: "POST", cookie: editor.cookie, body: { email: "x@example.test", role: "viewer" } })).status, 403);
+  const members = await (await request("/api/workspaces/current/members", { cookie: viewer.cookie })).json();
+  assert.equal(members.members.length, 3);
+  assert.deepEqual(members.invitations, [], "only managers see pending invitations");
+
+  const forged = { ...outsider, cookie: `${outsider.session}; qrc_workspace=${org.id}` };
+  assert.deepEqual(await titles(forged.cookie), [], "a forged workspace cookie falls back to the personal workspace");
+  assert.equal((await request(`/api/qr-codes/${orgQrId}`, { cookie: forged.cookie })).status, 404);
+
+  assert.equal((await request(`/api/workspaces/current/members/${owner.session && (await (await request("/api/auth/get-session", { cookie: owner.session })).json()).user.id}`, { method: "DELETE", cookie: owner.cookie })).status, 409, "the last owner cannot leave");
+  const editorId = (await (await request("/api/auth/get-session", { cookie: editor.session })).json()).user.id;
+  assert.equal((await request(`/api/workspaces/current/members/${editorId}`, { method: "PATCH", cookie: owner.cookie, body: { role: "admin" } })).status, 200);
+  const viewerId = (await (await request("/api/auth/get-session", { cookie: viewer.session })).json()).user.id;
+  assert.equal((await request(`/api/workspaces/current/members/${viewerId}`, { method: "PATCH", cookie: editor.cookie, body: { role: "owner" } })).status, 403, "admins cannot make owners");
+  assert.equal((await request(`/api/workspaces/current/members/${viewerId}`, { method: "DELETE", cookie: editor.cookie })).status, 200, "admins remove viewers");
+  assert.deepEqual(await titles(viewer.cookie), [], "removed member loses access on the next request");
+  assert.equal((await request(`/api/qr-codes/${orgQrId}`, { cookie: viewer.cookie })).status, 404);
+  const scan = await request(`/qr?code=${(await (await request(`/api/qr-codes/${orgQrId}`, { cookie: owner.cookie })).json()).qrCode.short_code}`);
+  assert.equal(scan.status, 302, "published QR codes keep working for the public");
+
+  assert.equal((await request("/api/workspaces/current", { method: "DELETE", cookie: editor.cookie, body: { confirm_name: "Acme Marketing" } })).status, 403, "only owners delete");
+  assert.equal((await request("/api/workspaces/current", { method: "DELETE", cookie: owner.cookie, body: { confirm_name: "Wrong" } })).status, 400);
+  assert.equal((await request("/api/workspaces/current", { method: "DELETE", cookie: owner.cookie, body: { confirm_name: "Acme Marketing" } })).status, 200);
+  assert.deepEqual(await titles(owner.cookie), ["Personal flyer"], "after deletion the owner is back in the personal workspace");
+  assert.equal((await request(`/qr?code=${(await (await request(`/api/qr-codes/${(await personal.clone().json()).qrCode.id}`, { cookie: owner.session })).json()).qrCode.short_code}`)).status, 302);
+});
+
+test("invitations are bound to the invited email, can be revoked and never leak details", async () => {
+  const owner = await person();
+  const invited = await person();
+  const stranger = await person();
+  const org = (await (await request("/api/workspaces", { method: "POST", cookie: owner.session, body: { name: "Studio" } })).json()).workspace;
+  await useWorkspace(owner, org.id);
+  const invite = await (await request("/api/workspaces/current/invitations", { method: "POST", cookie: owner.cookie, body: { email: invited.email.toUpperCase(), role: "editor" } })).json();
+  const token = invite.url.split("/invite/")[1];
+  assert.match(token, /^[A-Za-z0-9_-]{43}$/);
+  assert.equal((await request("/api/invitations/accept", { method: "POST", cookie: stranger.session, body: { token } })).status, 403, "other email addresses cannot accept");
+  const page = await request(`/invite/${token}`, { cookie: invited.session });
+  assert.equal(page.status, 200);
+  assert.match(await page.text(), /Studio/);
+  assert.equal((await request(`/invite/${token}`)).status, 307, "the link asks to sign in first");
+  assert.doesNotMatch(await (await request(`/invite/${"x".repeat(43)}`, { cookie: invited.session })).text(), /Studio/);
+  assert.equal((await request(`/api/workspaces/current/invitations/${invite.invitation.id}`, { method: "DELETE", cookie: owner.cookie })).status, 200);
+  assert.equal((await request("/api/invitations/accept", { method: "POST", cookie: invited.session, body: { token } })).status, 404, "revoked links stop working");
+  const again = await (await request("/api/workspaces/current/invitations", { method: "POST", cookie: owner.cookie, body: { email: invited.email, role: "viewer" } })).json();
+  assert.equal((await request("/api/invitations/accept", { method: "POST", cookie: invited.session, body: { token: again.url.split("/invite/")[1] } })).status, 200);
+  assert.equal((await request("/api/workspaces/current/invitations", { method: "POST", cookie: owner.cookie, body: { email: invited.email, role: "viewer" } })).status, 409, "members are not invited twice");
+  const list = await (await request("/api/workspaces", { cookie: invited.session })).json();
+  assert.deepEqual(list.workspaces.map((item) => [item.kind, item.role]).sort(), [["organization", "viewer"], ["personal", "owner"]]);
+});
