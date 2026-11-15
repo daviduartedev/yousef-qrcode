@@ -49,6 +49,7 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { useToast } from "@/hooks/use-toast";
 import { workspaceHeaders } from "@/lib/workspace-client";
 import { FindByImage } from "@/components/qr/FindByImage";
+import { trackingUrlFor } from "@/lib/qr-rules";
 
 // Chart colors
 const CHART_COLORS = {
@@ -217,7 +218,7 @@ const MyQRCodes = ({ query, result, origin, organization }: {
   }
 
   const getQRUrl = (qr: QRCodeRecord) =>
-    qr.tracking_enabled ? `${origin}/qr?code=${encodeURIComponent(qr.short_code)}` : qr.destination_url;
+    qr.tracking_enabled ? trackingUrlFor(origin, qr) : qr.destination_url;
 
   async function copyToClipboard(qr: QRCodeRecord) {
     try {

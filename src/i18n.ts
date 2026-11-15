@@ -23,6 +23,8 @@ import enForms from './locales/forms.en.json';
 import arForms from './locales/forms.ar.json';
 import enOrganizations from './locales/organizations.en.json';
 import arOrganizations from './locales/organizations.ar.json';
+import enAdvanced from './locales/advanced.en.json';
+import arAdvanced from './locales/advanced.ar.json';
 
 i18n
   .use(initReactI18next)
@@ -40,6 +42,7 @@ i18n
         cards: enCards,
         forms: enForms,
         organizations: enOrganizations,
+        advanced: enAdvanced,
       },
       ar: {
         translation: arTranslations,
@@ -53,6 +56,7 @@ i18n
         cards: arCards,
         forms: arForms,
         organizations: arOrganizations,
+        advanced: arAdvanced,
       },
     },
     lng: 'en',

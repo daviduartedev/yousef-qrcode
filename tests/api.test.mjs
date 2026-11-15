@@ -1741,3 +1741,145 @@ test("the created-by-me filter separates members' codes in a shared workspace", 
   assert.deepEqual(await titles(owner.cookie, "&creator=me"), ["Owner code"]);
   assert.deepEqual(await titles(member.cookie, "&creator=me"), ["Member code"]);
 });
+
+/** GET with an explicit Host header, as a custom domain would send it. */
+async function getWithHost(path, host) {
+  const { request: httpRequest } = await import("node:http");
+  const target = new URL(path, base);
+  return new Promise((resolve, reject) => {
+    const req = httpRequest({ hostname: target.hostname, port: target.port, path: target.pathname + target.search, method: "GET", headers: { host } }, (res) => {
+      res.resume();
+      res.on("end", () => resolve({ status: res.statusCode, location: res.headers.location }));
+    });
+    req.on("error", reject);
+    req.end();
+  });
+}
+const createTracked = async (cookie, title, destination) => (await (await request("/api/qr-codes", { method: "POST", cookie, body: { title, destination_url: destination } })).json()).qrCode;
+const unlock = (body) => request("/qr/unlock", { method: "POST", body });
+
+test("password-protected codes open only after the right password, with attempt limits", async () => {
+  const owner = await register();
+  const qr = await createTracked(owner, "Protected", "https://example.test/secret");
+  assert.equal((await request(`/api/qr-codes/${qr.id}/rules`, { method: "PATCH", cookie: owner, body: { password: "abc" } })).status, 400, "too short");
+  const saved = await request(`/api/qr-codes/${qr.id}/rules`, { method: "PATCH", cookie: owner, body: { password: "open sesame" } });
+  assert.equal(saved.status, 200);
+  assert.equal((await saved.json()).rules.hasPassword, true);
+  const record = await (await request(`/api/qr-codes/${qr.id}`, { cookie: owner })).json();
+  assert.doesNotMatch(JSON.stringify(record), /passwordHash|passwordSalt|open sesame/, "the password never leaves the server");
+  const scan = await request(`/qr?code=${qr.short_code}`);
+  assert.equal(scan.status, 302);
+  assert.equal(scan.headers.get("location"), `${base}/qr/gate?code=${qr.short_code}`);
+  assert.match(await (await request(`/qr/gate?code=${qr.short_code}`)).text(), /protected by a password/);
+  assert.equal((await unlock({ code: qr.short_code, password: "wrong" })).status, 403);
+  assert.equal((await fetch(new URL("/qr/unlock", base), { method: "POST", headers: { origin: "https://evil.example", "content-type": "application/json" }, body: "{}" })).status, 403);
+  const opened = await unlock({ code: qr.short_code, password: "open sesame" });
+  assert.equal(opened.status, 200);
+  assert.equal((await opened.json()).destination, "https://example.test/secret");
+  const counted = await (await request(`/api/qr-codes/${qr.id}`, { cookie: owner })).json();
+  assert.equal(counted.qrCode.total_scans, 1, "only the unlocked scan counts");
+  for (let attempt = 0; attempt < 49; attempt++) await unlock({ code: qr.short_code, password: `guess-${attempt}` });
+  assert.equal((await unlock({ code: qr.short_code, password: "open sesame" })).status, 429, "guessing is slowed down even for the right password");
+  const other = await register();
+  assert.equal((await request(`/api/qr-codes/${qr.id}/rules`, { method: "PATCH", cookie: other, body: { password: null } })).status, 404);
+  const direct = (await (await request("/api/qr-codes", { method: "POST", cookie: owner, body: { title: "Direct", destination_url: "https://example.test/d", tracking_enabled: false } })).json()).qrCode;
+  assert.equal((await request(`/api/qr-codes/${direct.id}/rules`, { method: "PATCH", cookie: owner, body: { askLocation: true } })).status, 409, "direct codes cannot have rules");
+  const page = await newLinkpage(owner, "blank");
+  await request(`/api/linkpages/${page.id}`, { method: "PATCH", cookie: owner, body: { draft: { ...page.draft, profile: { ...page.draft.profile, name: "Public" } } } });
+  await request(`/api/linkpages/${page.id}/publish`, { method: "POST", cookie: owner, body: { publish: true } });
+  const linked = (await (await request("/api/qr-codes", { method: "POST", cookie: owner, body: { link: { kind: "linkpage", id: page.id } } })).json()).qrCode;
+  assert.equal((await request(`/api/qr-codes/${linked.id}/rules`, { method: "PATCH", cookie: owner, body: { password: "secret-pass" } })).status, 409, "a password would not protect a public page");
+});
+
+test("schedules use time zones and send people to the fallback outside the window", async () => {
+  const owner = await register();
+  const qr = await createTracked(owner, "Event", "https://example.test/event");
+  const past = { timezone: "Asia/Riyadh", startsAt: null, endsAt: "2020-01-01T00:00", days: [], from: null, to: null };
+  await request(`/api/qr-codes/${qr.id}/rules`, { method: "PATCH", cookie: owner, body: { schedule: past } });
+  const ended = await request(`/qr?code=${qr.short_code}`);
+  assert.equal(ended.status, 410);
+  assert.match(await ended.text(), /has ended/);
+  assert.equal((await request(`/api/qr-codes/${qr.id}/rules`, { method: "PATCH", cookie: owner, body: { fallbackUrl: "javascript:alert(1)" } })).status, 400);
+  await request(`/api/qr-codes/${qr.id}/rules`, { method: "PATCH", cookie: owner, body: { fallbackUrl: "https://example.test/next-year" } });
+  const fallback = await request(`/qr?code=${qr.short_code}`);
+  assert.equal(fallback.headers.get("location"), "https://example.test/next-year");
+  const future = { ...past, endsAt: null, startsAt: "2099-01-01T00:00" };
+  await request(`/api/qr-codes/${qr.id}/rules`, { method: "PATCH", cookie: owner, body: { schedule: future, fallbackUrl: null } });
+  assert.match(await (await request(`/qr?code=${qr.short_code}`)).text(), /not active yet/);
+  await request(`/api/qr-codes/${qr.id}/rules`, { method: "PATCH", cookie: owner, body: { schedule: null } });
+  assert.equal((await request(`/qr?code=${qr.short_code}`)).headers.get("location"), "https://example.test/event");
+  assert.equal((await request(`/api/qr-codes/${qr.id}/rules`, { method: "PATCH", cookie: owner, body: { schedule: { ...past, timezone: "Mars/Base" } } })).status, 400);
+});
+
+test("location is stored only when the visitor shares it, rounded to about 1 km", async () => {
+  const owner = await register();
+  const qr = await createTracked(owner, "Where", "https://example.test/where");
+  await request(`/api/qr-codes/${qr.id}/rules`, { method: "PATCH", cookie: owner, body: { askLocation: true } });
+  assert.equal((await request(`/qr?code=${qr.short_code}`)).headers.get("location"), `${base}/qr/gate?code=${qr.short_code}`);
+  const browser = { origin: base, "content-type": "application/json", "user-agent": "Mozilla/5.0 (iPhone) Mobile Safari" };
+  const shared = await request("/qr/unlock", { method: "POST", headers: browser, body: { code: qr.short_code, location: { latitude: 38.722252, longitude: -9.139337 } } });
+  assert.equal(shared.status, 200);
+  const declined = await request("/qr/unlock", { method: "POST", headers: { ...browser, "user-agent": "Mozilla/5.0 (Android) Mobile Chrome" }, body: { code: qr.short_code } });
+  assert.equal(declined.status, 200);
+  assert.equal((await request("/qr/unlock", { method: "POST", headers: browser, body: { code: qr.short_code, location: { latitude: 91, longitude: 0 } } })).status, 400);
+  const rows = await withTestDatabase(async (pool) => (await pool.query("select latitude, longitude from qrconnect.qr_scans where qr_code_id = $1 order by scanned_at", [qr.id])).rows);
+  assert.deepEqual(rows, [{ latitude: 38.72, longitude: -9.14 }, { latitude: null, longitude: null }]);
+});
+
+test("aliases are permanent extra short codes that never move to another code", async () => {
+  const owner = await register();
+  const other = await register();
+  const qr = await createTracked(owner, "Menu", "https://example.test/menu");
+  const alias = `menu-${randomUUID().slice(0, 6)}`;
+  assert.equal((await request(`/api/qr-codes/${qr.id}/aliases`, { method: "POST", cookie: owner, body: { alias: "a" } })).status, 400);
+  assert.equal((await request(`/api/qr-codes/${qr.id}/aliases`, { method: "POST", cookie: owner, body: { alias } })).status, 201);
+  assert.equal((await request(`/r/${alias}`)).headers.get("location"), "https://example.test/menu");
+  assert.equal((await request(`/qr?code=${alias}`)).headers.get("location"), "https://example.test/menu");
+  assert.equal((await request(`/r/${qr.short_code}`)).status, 302, "the original short code keeps working");
+  const otherQr = await createTracked(other, "Theirs", "https://example.test/theirs");
+  assert.equal((await request(`/api/qr-codes/${otherQr.id}/aliases`, { method: "POST", cookie: other, body: { alias } })).status, 409);
+  assert.equal((await request(`/api/qr-codes/${qr.id}/aliases`, { cookie: other })).status, 404);
+  assert.deepEqual((await (await request(`/api/qr-codes/${qr.id}/aliases`, { cookie: owner })).json()).aliases.map((item) => item.alias), [alias]);
+  await request(`/api/qr-codes/${qr.id}`, { method: "DELETE", cookie: owner });
+  assert.equal((await request(`/r/${alias}`)).status, 410, "the alias of a deleted code stays reserved");
+  assert.equal((await request(`/api/qr-codes/${otherQr.id}/aliases`, { method: "POST", cookie: other, body: { alias } })).status, 409, "and is never given to another code");
+});
+
+test("custom domains need a DNS TXT proof and only serve codes of their workspace", async () => {
+  const { readFile, writeFile } = await import("node:fs/promises");
+  const owner = await register();
+  const other = await register();
+  const hostname = `qr-${randomUUID().slice(0, 8)}.example.com`;
+  assert.equal((await request("/api/domains", { method: "POST", cookie: owner, body: { hostname: "localhost" } })).status, 400);
+  const added = await request("/api/domains", { method: "POST", cookie: owner, body: { hostname: `HTTPS://${hostname.toUpperCase()}/x` } });
+  assert.equal(added.status, 201);
+  const domain = (await added.json()).domain;
+  assert.equal(domain.hostname, hostname);
+  assert.equal((await request("/api/domains", { method: "POST", cookie: other, body: { hostname } })).status, 201, "a pending claim does not block anyone");
+  const qr = await createTracked(owner, "Branded", "https://example.test/branded");
+  assert.equal((await request(`/api/qr-codes/${qr.id}/domain`, { method: "PATCH", cookie: owner, body: { domain_id: domain.id } })).status, 409, "unverified domains cannot be used");
+  assert.equal((await (await request(`/api/domains/${domain.id}/verify`, { method: "POST", cookie: owner })).json()).verified, false);
+  const fixtures = process.env.TEST_DNS_FIXTURES;
+  const records = JSON.parse(await readFile(fixtures, "utf8").catch(() => "{}"));
+  records[domain.record_name] = [[domain.record_value]];
+  await writeFile(fixtures, JSON.stringify(records));
+  assert.equal((await request(`/api/domains/${domain.id}/verify`, { method: "POST", cookie: other })).status, 404);
+  assert.equal((await (await request(`/api/domains/${domain.id}/verify`, { method: "POST", cookie: owner })).json()).verified, true);
+  assert.equal((await request("/api/domains", { method: "POST", cookie: other, body: { hostname } })).status, 409, "a verified domain has one owner");
+  const assigned = await request(`/api/qr-codes/${qr.id}/domain`, { method: "PATCH", cookie: owner, body: { domain_id: domain.id } });
+  assert.equal((await assigned.json()).tracking_host, hostname);
+  const record = await (await request(`/api/qr-codes/${qr.id}`, { cookie: owner })).json();
+  assert.equal(record.trackingUrl, `https://${hostname}/r/${qr.short_code}`);
+  assert.deepEqual(await getWithHost(`/r/${qr.short_code}`, hostname), { status: 302, location: "https://example.test/branded" });
+  const otherQr = await createTracked(other, "Not theirs", "https://example.test/other");
+  assert.equal((await getWithHost(`/r/${otherQr.short_code}`, hostname)).status, 404, "a domain does not serve another workspace's codes");
+  assert.equal((await getWithHost(`/r/${qr.short_code}`, "unverified.example.org")).status, 404);
+  assert.equal((await request(`/r/${qr.short_code}`)).status, 302, "the app address keeps working for printed codes");
+  assert.equal((await request(`/api/domains/${domain.id}`, { method: "DELETE", cookie: owner })).status, 409, "a domain in use cannot be removed");
+  await request(`/api/qr-codes/${qr.id}/domain`, { method: "PATCH", cookie: owner, body: { domain_id: null } });
+  assert.equal((await getWithHost(`/r/${qr.short_code}`, hostname)).status, 302, "codes printed with an earlier domain keep working");
+  assert.equal((await request(`/api/domains/${domain.id}`, { method: "DELETE", cookie: owner })).status, 409, "a domain printed in codes can never be removed");
+  const pending = await request("/api/domains", { method: "POST", cookie: other, body: { hostname: `other-${hostname}` } });
+  assert.equal(pending.status, 201);
+  assert.equal((await request("/api/domains", { method: "POST", cookie: owner, body: { hostname: `other-${hostname}` } })).status, 201, "an unverified claim does not block the real owner");
+});

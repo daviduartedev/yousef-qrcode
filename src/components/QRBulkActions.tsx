@@ -17,6 +17,7 @@ import type { QRCodeRecord } from "@/lib/qr-types";
 import { getQRCode } from "@/lib/qrTracking";
 import { loadAssetImage } from "@/lib/asset-image";
 import { workspaceHeaders } from "@/lib/workspace-client";
+import { trackingUrlFor } from "@/lib/qr-rules";
 
 const messages = {
   en: {
@@ -92,7 +93,7 @@ async function downloadSelected(
         const { qrCode, trackingUrl } = await getQRCode(selectedQR.id);
         signal.throwIfAborted();
         const data = qrCode.tracking_enabled
-          ? trackingUrl ?? (origin + "/qr?code=" + encodeURIComponent(qrCode.short_code))
+          ? trackingUrl ?? trackingUrlFor(origin, qrCode)
           : qrCode.destination_url;
         const logoAssetId = qrCode.design?.logoAssetId;
         const logoImage = logoAssetId ? await loadAssetImage(logoAssetId) : undefined;

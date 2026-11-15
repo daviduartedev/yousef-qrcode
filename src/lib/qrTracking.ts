@@ -3,6 +3,7 @@ import type { QRContent } from "./qr-content";
 import type { QRDesign } from "./qr-design";
 import { workspaceHeaders } from "@/lib/workspace-client";
 import type { LinkedQRKind } from "@/lib/qr-linked";
+import { trackingUrlFor } from "@/lib/qr-rules";
 
 export class QRRequestError extends Error {
   constructor(public readonly status: number) {
@@ -97,5 +98,5 @@ export function deleteQRCode(id: string) {
   });
 }
 
-export const getTrackingUrl = (shortCode: string) =>
-  window.location.origin + "/qr?code=" + encodeURIComponent(shortCode);
+export const getTrackingUrl = (shortCode: string, trackingHost?: string | null) =>
+  trackingUrlFor(window.location.origin, { short_code: shortCode, tracking_host: trackingHost });
