@@ -7,7 +7,7 @@ import { assetLimits, type AssetPage, type AssetRecord } from '@/lib/assets';
 import { uploadAssetFile } from '@/lib/asset-client';
 
 /** Picks a QR logo from the account's own image library, with an inline upload. */
-export function LibraryLogoPicker({ selected, onSelect }: { selected: string | null; onSelect: (id: string | null) => void }) {
+export function LibraryLogoPicker({ selected, onSelect, title }: { selected: string | null; onSelect: (id: string | null) => void; title?: string }) {
   const { t } = useTranslation('assets');
   const inputId = useId();
   const input = useRef<HTMLInputElement>(null);
@@ -40,9 +40,9 @@ export function LibraryLogoPicker({ selected, onSelect }: { selected: string | n
   }
 
   return (
-    <section aria-labelledby={`${inputId}-title`} className="space-y-3 border-t pt-4">
+    <section aria-labelledby={`${inputId}-title`} className={title ? 'space-y-3' : 'space-y-3 border-t pt-4'}>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 id={`${inputId}-title`} className="text-sm font-semibold">{t('From your library')}</h3>
+        <h3 id={`${inputId}-title`} className="text-sm font-semibold">{title ?? t('From your library')}</h3>
         <Link href="/assets" className="text-sm text-primary hover:underline">{t('Open asset library')}</Link>
       </div>
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}

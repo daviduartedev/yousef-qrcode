@@ -1,23 +1,14 @@
 import 'server-only';
-import { isIP } from 'node:net';
 import { and, eq, gte, sql } from 'drizzle-orm';
 import { getDb } from '@/server/db';
 import { qrCodes, qrScans } from '@/server/db/schema';
-import { getServerEnv } from '@/server/env';
 import { safeDestination } from '@/server/qr-codes';
 import { HttpError } from '@/server/http';
-import { duplicateWindowSeconds, isBotUserAgent } from '@/lib/qr-analytics';
+import { duplicateWindowSeconds } from '@/lib/qr-analytics';
+import { visitorFrom } from '@/server/visitor';
 
 const noCache = { 'Cache-Control': 'no-store, max-age=0', 'X-Robots-Tag': 'noindex, nofollow' };
 const validCode = (code: string | null): code is string => Boolean(code && /^[A-Za-z0-9_-]{1,20}$/.test(code));
-
-function deviceInfo(userAgent: string) {
-  const ua = userAgent.toLowerCase();
-  const deviceType = /ipad|tablet/.test(ua) ? 'tablet' : /mobile|android|iphone|ipod/.test(ua) ? 'mobile' : 'desktop';
-  const os = /android/.test(ua) ? 'Android' : /iphone|ipad|ipod/.test(ua) ? 'iOS' : /windows/.test(ua) ? 'Windows' : /mac os|macintosh/.test(ua) ? 'macOS' : /linux/.test(ua) ? 'Linux' : 'Unknown';
-  const browser = /edg/.test(ua) ? 'Edge' : /opr|opera/.test(ua) ? 'Opera' : /chrome|crios/.test(ua) ? 'Chrome' : /firefox|fxios/.test(ua) ? 'Firefox' : /safari/.test(ua) ? 'Safari' : 'Unknown';
-  return { deviceType, os, browser };
-}
 
 export async function scanAndRedirect(request: Request, record = true) {
   try {
@@ -32,12 +23,10 @@ export async function scanAndRedirect(request: Request, record = true) {
         const [{ count }] = await tx.select({ count: sql<number>`count(*)::int` }).from(qrScans)
           .where(and(eq(qrScans.qrCodeId, qr.id), gte(qrScans.scannedAt, sql`now() - interval '60 seconds'`)));
         if (count >= 300) throw new HttpError(429, 'Please try this QR code again shortly');
-        const userAgent = (request.headers.get('user-agent') || '').slice(0, 1024);
-        const env = getServerEnv();
-        const forwarded = env.trustProxyHeaders ? request.headers.get('x-forwarded-for')?.split(',')[0].trim() : undefined;
-        const ipAddress = forwarded && isIP(forwarded) ? forwarded : null;
+        const visitor = visitorFrom(request);
+        const { userAgent, ipAddress } = visitor;
         // Bots and immediate repeats from the same address and browser still redirect, but are not counted.
-        if (isBotUserAgent(userAgent)) return new URL(qr.destinationUrl).href;
+        if (visitor.bot) return new URL(qr.destinationUrl).href;
         if (ipAddress) {
           const [{ repeats }] = await tx.select({ repeats: sql<number>`count(*)::int` }).from(qrScans).where(and(
             eq(qrScans.qrCodeId, qr.id), eq(qrScans.ipAddress, ipAddress), eq(qrScans.userAgent, userAgent),
@@ -46,10 +35,8 @@ export async function scanAndRedirect(request: Request, record = true) {
           if (repeats > 0) return new URL(qr.destinationUrl).href;
         }
         await tx.insert(qrScans).values({
-          qrCodeId: qr.id, userAgent, ...deviceInfo(userAgent),
-          ipAddress,
-          country: env.trustProxyHeaders ? request.headers.get('x-vercel-ip-country')?.slice(0, 100) : null,
-          city: env.trustProxyHeaders ? request.headers.get('x-vercel-ip-city')?.slice(0, 100) : null,
+          qrCodeId: qr.id, userAgent, deviceType: visitor.deviceType, os: visitor.os, browser: visitor.browser,
+          ipAddress, country: visitor.country, city: visitor.city,
         });
         await tx.update(qrCodes).set({ totalScans: sql`${qrCodes.totalScans} + 1`, updatedAt: new Date() }).where(eq(qrCodes.id, qr.id));
       }

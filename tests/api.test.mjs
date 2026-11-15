@@ -1166,3 +1166,168 @@ test("asset downloads use safe file names and PDFs stay viewable", async () => {
   assert.doesNotMatch(file.headers.get("content-security-policy"), /sandbox/);
   assert.equal(file.headers.get("content-type"), "application/pdf");
 });
+
+async function newLinkpage(cookie, template = "business") {
+  const response = await request("/api/linkpages", { method: "POST", cookie, body: { template, creation_key: randomUUID() } });
+  assert.equal(response.status, 201);
+  return (await response.json()).linkpage;
+}
+const lpBlock = (extra) => ({ id: Math.random().toString(36).slice(2, 12).padEnd(10, "0"), ...extra });
+const formulaLabel = '=HYPERLINK("x")';
+
+test("linkpage drafts are created once per key, stay private and publish to a stable public address", async () => {
+  const owner = await register();
+  const other = await register();
+  const key = randomUUID();
+  const first = await request("/api/linkpages", { method: "POST", cookie: owner, body: { template: "blank", creation_key: key } });
+  const again = await request("/api/linkpages", { method: "POST", cookie: owner, body: { template: "blank", creation_key: key } });
+  assert.equal(first.status, 201);
+  assert.equal(again.status, 200);
+  const page = (await first.json()).linkpage;
+  assert.equal((await again.json()).linkpage.id, page.id);
+  assert.equal((await (await request("/api/linkpages", { cookie: owner })).json()).linkpages.length, 1);
+  assert.equal((await request("/api/linkpages", { method: "POST", cookie: owner, body: { template: "nope", creation_key: randomUUID() } })).status, 400);
+
+  const draft = { ...page.draft, profile: { ...page.draft.profile, name: "Café Lisboa" },
+    blocks: [lpBlock({ type: "link", label: "Menu", url: "https://example.test/menu" }), lpBlock({ type: "phone", label: "Call", phone: "+351 210 000 000" })] };
+  const unsafe = { ...draft, blocks: [lpBlock({ type: "link", label: "x", url: "javascript:alert(1)" })] };
+  assert.equal((await request(`/api/linkpages/${page.id}`, { method: "PATCH", cookie: owner, body: { draft: unsafe } })).status, 400);
+  const saved = await request(`/api/linkpages/${page.id}`, { method: "PATCH", cookie: owner, body: { draft, title: "Lisboa internal" } });
+  assert.equal(saved.status, 200);
+  const slug = `cafe-${randomUUID().slice(0, 8)}`;
+  assert.equal((await request(`/api/linkpages/${page.id}`, { method: "PATCH", cookie: owner, body: { slug: "api" } })).status, 400);
+  assert.equal((await request(`/api/linkpages/${page.id}`, { method: "PATCH", cookie: owner, body: { slug } })).status, 200);
+  const taken = await newLinkpage(other);
+  assert.equal((await request(`/api/linkpages/${taken.id}`, { method: "PATCH", cookie: other, body: { slug } })).status, 409);
+
+  assert.equal((await request(`/p/${slug}`)).status, 404, "draft is private");
+  const foreignCalls = [["GET", ""], ["PATCH", "", { title: "x" }], ["DELETE", ""], ["POST", "/publish", { publish: true }], ["POST", "/qr"], ["GET", "/analytics"]];
+  for (const [method, path, body] of foreignCalls) {
+    assert.equal((await request(`/api/linkpages/${page.id}${path}`, { method, cookie: other, body })).status, 404, `${method} ${path}`);
+  }
+  const published = await request(`/api/linkpages/${page.id}/publish`, { method: "POST", cookie: owner, body: { publish: true } });
+  assert.equal(published.status, 200);
+  const html = await (await request(`/p/${slug}`)).text();
+  assert.match(html, /Café Lisboa/);
+  assert.doesNotMatch(html, /Lisboa internal/, "internal name is not public");
+  assert.equal((await request(`/api/linkpages/${page.id}`, { method: "PATCH", cookie: owner, body: { slug: `${slug}-x` } })).status, 409);
+
+  const later = { ...draft, profile: { ...draft.profile, name: "Draft only name" } };
+  await request(`/api/linkpages/${page.id}`, { method: "PATCH", cookie: owner, body: { draft: later } });
+  assert.doesNotMatch(await (await request(`/p/${slug}`)).text(), /Draft only name/, "draft edits wait for publish");
+  assert.equal((await (await request(`/api/linkpages/${page.id}`, { cookie: owner })).json()).linkpage.has_unpublished_changes, true);
+
+  const qr = await request(`/api/linkpages/${page.id}/qr`, { method: "POST", cookie: owner });
+  assert.equal(qr.status, 201);
+  const qrId = (await qr.json()).qr_code_id;
+  const qrAgain = await request(`/api/linkpages/${page.id}/qr`, { method: "POST", cookie: owner });
+  assert.equal((await qrAgain.json()).qr_code_id, qrId);
+  const qrRecord = (await (await request(`/api/qr-codes/${qrId}`, { cookie: owner })).json()).qrCode;
+  assert.equal(qrRecord.destination_url, `${base}/p/${slug}`);
+  const scan = await request(`/qr?code=${qrRecord.short_code}`);
+  assert.equal(scan.status, 302);
+  assert.equal(scan.headers.get("location"), `${base}/p/${slug}`);
+
+  await request(`/api/linkpages/${page.id}/publish`, { method: "POST", cookie: owner, body: { publish: false } });
+  assert.equal((await request(`/p/${slug}`)).status, 404);
+  await request(`/api/linkpages/${page.id}/publish`, { method: "POST", cookie: owner, body: { publish: true } });
+  assert.match(await (await request(`/p/${slug}`)).text(), /Draft only name/);
+  assert.equal((await request(`/api/linkpages/${page.id}`, { method: "DELETE", cookie: owner })).status, 200);
+  assert.equal((await request(`/p/${slug}`)).status, 404);
+});
+
+test("linkpage views and clicks are counted once, without bots, and match analytics and export", async () => {
+  const owner = await register();
+  const page = await newLinkpage(owner, "blank");
+  const link = lpBlock({ type: "link", label: formulaLabel, url: "https://example.test/menu" });
+  const phone = lpBlock({ type: "phone", label: "Call", phone: "+351 210 000 000" });
+  const draft = { ...page.draft, profile: { ...page.draft.profile, name: "Counted" }, blocks: [link, phone] };
+  await request(`/api/linkpages/${page.id}`, { method: "PATCH", cookie: owner, body: { draft } });
+  await request(`/api/linkpages/${page.id}/publish`, { method: "POST", cookie: owner, body: { publish: true } });
+  const slug = page.slug;
+  const browser = { origin: base, "user-agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) Mobile/15E148 Safari/604.1" };
+  assert.equal((await request(`/p/${slug}/view`, { method: "POST", headers: browser })).status, 204);
+  assert.equal((await request(`/p/${slug}/view`, { method: "POST", headers: browser })).status, 204);
+  assert.equal((await request(`/p/${slug}/view`, { method: "POST", headers: { origin: base, "user-agent": "facebookexternalhit/1.1" } })).status, 204);
+  assert.equal((await fetch(new URL(`/p/${slug}/view`, base), { method: "POST", headers: { origin: "https://evil.example" } })).status, 403);
+  const click = await request(`/p/${slug}/go/${link.id}`, { headers: browser });
+  assert.equal(click.status, 302);
+  assert.equal(click.headers.get("location"), "https://example.test/menu");
+  assert.equal((await request(`/p/${slug}/go/${phone.id}`, { headers: browser })).headers.get("location"), "tel:+351210000000");
+  assert.equal((await request(`/p/${slug}/go/${"z".repeat(10)}`)).status, 404);
+  await request(`/p/${slug}/go/${link.id}`, { headers: { "user-agent": "Slackbot-LinkExpanding 1.0" } });
+
+  const today = new Date().toISOString().slice(0, 10);
+  const data = await (await request(`/api/linkpages/${page.id}/analytics?from=${today}&to=${today}`, { cookie: owner })).json();
+  assert.deepEqual([data.summary.views, data.summary.clicks], [2, 2]);
+  assert.deepEqual(data.blocks.map((item) => [item.label, item.clicks]).sort(), [[formulaLabel, 1], ["Call", 1]].sort());
+  assert.equal(data.devices.mobile, 2);
+  assert.deepEqual(data.daily, [{ day: today, views: 2, clicks: 2 }]);
+  const desktopOnly = await (await request(`/api/linkpages/${page.id}/analytics?from=${today}&to=${today}&device=desktop`, { cookie: owner })).json();
+  assert.equal(desktopOnly.summary.views, 0);
+  const csv = await (await request(`/api/linkpages/${page.id}/analytics/export?from=${today}&to=${today}`, { cookie: owner })).text();
+  assert.ok(csv.includes(`${today},2,2`));
+  assert.ok(csv.includes("'=HYPERLINK"));
+  assert.equal((await (await request("/api/linkpages", { cookie: owner })).json()).linkpages[0].views_30d, 2);
+});
+
+test("linkpage images are public only when the published page uses them", async () => {
+  const owner = await register();
+  const other = await register();
+  const { asset: avatar } = await (await uploadFile(owner, tinyPng, "avatar.png")).json();
+  const { asset: privateFile } = await (await uploadFile(owner, tinyPng, "private.png")).json();
+  const { asset: foreign } = await (await uploadFile(other, tinyPng, "foreign.png")).json();
+  const page = await newLinkpage(owner, "blank");
+  const draft = (avatarAssetId) => ({ ...page.draft, profile: { ...page.draft.profile, name: "Media", avatarAssetId } });
+  assert.equal((await request(`/api/linkpages/${page.id}`, { method: "PATCH", cookie: owner, body: { draft: draft(foreign.id) } })).status, 400);
+  await request(`/api/linkpages/${page.id}`, { method: "PATCH", cookie: owner, body: { draft: draft(avatar.id) } });
+  assert.equal((await request(`/p/${page.slug}/media/${avatar.id}`)).status, 404, "unpublished");
+  await request(`/api/linkpages/${page.id}/publish`, { method: "POST", cookie: owner, body: { publish: true } });
+  const media = await request(`/p/${page.slug}/media/${avatar.id}`);
+  assert.equal(media.status, 200);
+  assert.equal(media.headers.get("content-type"), "image/png");
+  assert.match(media.headers.get("content-security-policy"), /sandbox/);
+  assert.equal((await request(`/p/${page.slug}/media/${privateFile.id}`)).status, 404);
+  assert.equal((await request(`/p/${page.slug}/media/${foreign.id}`)).status, 404);
+  assert.ok((await (await request(`/p/${page.slug}`)).text()).includes(`/p/${page.slug}/media/${avatar.id}`));
+});
+
+test("linkpage addresses are never handed to another account and QR links survive renames and deletion", async () => {
+  const owner = await register();
+  const other = await register();
+  const page = await newLinkpage(owner, "blank");
+  const first = `first-${randomUUID().slice(0, 8)}`;
+  const second = `second-${randomUUID().slice(0, 8)}`;
+  assert.equal((await request(`/api/linkpages/${page.id}`, { method: "PATCH", cookie: owner, body: { slug: first } })).status, 200);
+  assert.equal((await request(`/api/linkpages/${page.id}`, { method: "PATCH", cookie: owner, body: { slug: second } })).status, 200);
+  const squatter = await newLinkpage(other, "blank");
+  assert.equal((await request(`/api/linkpages/${squatter.id}`, { method: "PATCH", cookie: other, body: { slug: first } })).status, 409, "old address stays reserved");
+  assert.equal((await request(`/api/linkpages/${page.id}`, { method: "PATCH", cookie: owner, body: { slug: first } })).status, 200, "owner may reuse it");
+
+  const qr = await (await request(`/api/linkpages/${page.id}/qr`, { method: "POST", cookie: owner })).json();
+  const renamed = await request(`/api/linkpages/${page.id}`, { method: "PATCH", cookie: owner, body: { slug: second } });
+  assert.equal(renamed.status, 409, "a QR code locks the address before publishing");
+
+  const removed = await (await request(`/api/linkpages/${page.id}`, { method: "DELETE", cookie: owner })).json();
+  assert.equal(removed.qr_code_deactivated, true);
+  const code = (await (await request(`/api/qr-codes/${qr.qr_code_id}`, { cookie: owner })).json()).qrCode;
+  assert.equal(code.is_active, false);
+  assert.equal((await request(`/qr?code=${code.short_code}`)).status, 410);
+  assert.equal((await request(`/api/linkpages/${squatter.id}`, { method: "PATCH", cookie: other, body: { slug: first } })).status, 409, "deleted address is not released");
+});
+
+test("embedded or cross-site requests do not count as linkpage views or clicks", async () => {
+  const owner = await register();
+  const page = await newLinkpage(owner, "blank");
+  const link = lpBlock({ type: "link", label: "Go", url: "https://example.test/go" });
+  await request(`/api/linkpages/${page.id}`, { method: "PATCH", cookie: owner, body: { draft: { ...page.draft, profile: { ...page.draft.profile, name: "Embeds" }, blocks: [link] } } });
+  await request(`/api/linkpages/${page.id}/publish`, { method: "POST", cookie: owner, body: { publish: true } });
+  const embedded = await request(`/p/${page.slug}/go/${link.id}`, { headers: { "sec-fetch-dest": "image", "sec-fetch-site": "cross-site" } });
+  assert.equal(embedded.status, 302, "still redirects");
+  assert.equal((await request(`/p/${page.slug}/view`, { method: "POST", headers: { origin: base, "sec-fetch-site": "cross-site" } })).status, 204);
+  const today = new Date().toISOString().slice(0, 10);
+  const data = await (await request(`/api/linkpages/${page.id}/analytics?from=${today}&to=${today}`, { cookie: owner })).json();
+  assert.deepEqual([data.summary.views, data.summary.clicks], [0, 0]);
+  const tooBig = await request(`/api/linkpages/${page.id}`, { method: "PATCH", cookie: owner, body: { title: "x".repeat(70 * 1024) } });
+  assert.equal(tooBig.status, 413);
+});
