@@ -24,7 +24,7 @@ function embeddedIPv4(v6: string): string | 'unknown' | null {
 
 export type ApiKeyRecord = { id: string; name: string; prefix: string; scopes: ApiScope[]; created_at: string; last_used_at: string | null; revoked_at: string | null };
 export type WebhookRecord = { id: string; url: string; events: WebhookEvent[]; active: boolean; created_at: string };
-export type DeliveryRecord = { id: string; event_id: string; event: string; status: 'pending' | 'delivered' | 'failed'; attempts: number; last_status_code: number | null; last_error: string | null; created_at: string; delivered_at: string | null; next_attempt_at: string | null };
+export type DeliveryRecord = { id: string; event_id: string; event: string; status: 'pending' | 'delivered' | 'failed' | 'skipped'; attempts: number; last_status_code: number | null; last_error: string | null; created_at: string; delivered_at: string | null; next_attempt_at: string | null };
 
 /** IPv4/IPv6 ranges a webhook may never reach: loopback, private, link-local, carrier NAT, multicast and reserved. */
 export function blockedAddress(address: string): boolean {
