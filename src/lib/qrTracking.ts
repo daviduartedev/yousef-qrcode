@@ -1,5 +1,12 @@
-import type { QRAnalyticsResponse, QRCodeRecord } from "./qr-types";
+import type { QRAnalyticsResponse, QRCodeRecord, QRDestinationChange } from "./qr-types";
+import type { QRContent } from "./qr-content";
 import type { QRDesign } from "./qr-design";
+
+export class QRRequestError extends Error {
+  constructor(public readonly status: number) {
+    super("Não foi possível concluir a operação. Tente novamente.");
+  }
+}
 
 async function api<T>(path: string, options?: RequestInit): Promise<T> {
   const response = await fetch(path, {
@@ -8,7 +15,7 @@ async function api<T>(path: string, options?: RequestInit): Promise<T> {
     cache: "no-store",
   });
   if (!response.ok)
-    throw new Error("Não foi possível concluir a operação. Tente novamente.");
+    throw new QRRequestError(response.status);
   return response.json() as Promise<T>;
 }
 
@@ -33,6 +40,27 @@ export function saveNewQRCode(
       tracking_enabled: trackingEnabled,
     }),
   });
+}
+export function saveNewStaticQRCode(content: QRContent, title: string, design: QRDesign) {
+  return api<SavedQRCode>("/api/qr-codes", {
+    method: "POST",
+    body: JSON.stringify({
+      content,
+      ...(title.trim() ? { title: Array.from(title.trim()).slice(0, 255).join("") } : {}),
+      design,
+    }),
+  });
+}
+export function changeQRDestination(id: string, destinationUrl: string) {
+  return api<SavedQRCode>("/api/qr-codes/" + encodeURIComponent(id), {
+    method: "PATCH",
+    body: JSON.stringify({ destination_url: destinationUrl }),
+  });
+}
+export function getQRDestinationChanges(id: string) {
+  return api<{ changes: QRDestinationChange[] }>(
+    "/api/qr-codes/" + encodeURIComponent(id) + "/destinations",
+  );
 }
 export function getQRCode(id: string) {
   return api<SavedQRCode>("/api/qr-codes/" + encodeURIComponent(id));

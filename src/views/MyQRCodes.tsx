@@ -14,6 +14,8 @@ const QRCodeStyled = dynamic(() => import("@/components/QRCodePreview"), {
 import { getQRCodeAnalytics, deleteQRCode, setQRCodeActive } from "@/lib/qrTracking";
 import { clearQRFilters, hasQRFilters, qrListHref, type QRListQuery } from "@/lib/qr-list";
 import { WorkspaceShell } from "@/components/WorkspaceShell";
+import { QRDestinationEditor } from "@/components/QRDestinationEditor";
+import { describeQRDestination, isLinkDestination } from "@/lib/qr-content";
 import { QRListFilters, type QROrganization } from "@/components/QRListFilters";
 import { QRCollections, QRCodeOrganization } from "@/components/QRCollections";
 import { QRBulkActions } from "@/components/QRBulkActions";
@@ -404,7 +406,7 @@ const MyQRCodes = ({ query, result, origin, organization }: {
                       <div className="min-w-0">
                         <h3 ref={query.focus === qr.id ? target : undefined} tabIndex={query.focus === qr.id ? -1 : undefined}
                           dir="auto" className="break-words font-semibold">{qr.title || qr.destination_url}</h3>
-                        <p dir="ltr" className="truncate text-start text-sm text-muted-foreground" title={qr.destination_url}>{qr.destination_url}</p>
+                        <p dir="auto" className="truncate text-start text-sm text-muted-foreground" title={describeQRDestination(qr)}>{describeQRDestination(qr)}</p>
                         <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                           <span className="rounded bg-muted px-2 py-1 font-medium">{copy(qr.tracking_enabled ? "Tracked" : "Direct")}</span>
                           {qr.tracking_enabled && <span className={qr.is_active
@@ -433,11 +435,11 @@ const MyQRCodes = ({ query, result, origin, organization }: {
                         onClick={() => navigate("/app?edit=" + encodeURIComponent(qr.id))}>
                         <Pencil className="size-4" aria-hidden="true" />
                       </Button>
-                      <Button asChild variant="ghost" size="icon" className="size-11">
+                      {isLinkDestination(qr.destination_url) && <Button asChild variant="ghost" size="icon" className="size-11">
                         <a href={qr.destination_url} target="_blank" rel="noopener noreferrer" title={copy("Open destination")} aria-label={copy("Open destination")}>
                           <ExternalLink className="size-4" aria-hidden="true" />
                         </a>
-                      </Button>
+                      </Button>}
                       {qr.tracking_enabled && <Button variant="outline" className="min-h-11 gap-2" disabled={busy} onClick={() => handleTracking(qr)}>
                         {qr.is_active ? <Pause className="size-4" aria-hidden="true" /> : <Play className="size-4" aria-hidden="true" />}
                         {copy(qr.is_active ? "Pause tracking" : "Reactivate tracking")}
@@ -457,6 +459,9 @@ const MyQRCodes = ({ query, result, origin, organization }: {
                   <CollapsibleContent>
                     <div className="border-t border-border bg-muted/30 p-4 sm:p-5">
                       <QRCodeOrganization qr={qr} organization={organization} busy={busy} onChange={body => organize(qr, body)} />
+                      {qr.tracking_enabled && <div className="mb-6 rounded-lg bg-card p-4 shadow-sm">
+                        <QRDestinationEditor record={qr} onChanged={refresh} />
+                      </div>}
                       {/* QR Code Preview Section */}
                       <div className="mb-6 p-4 bg-card rounded-lg shadow-sm">
                         <h4 className="text-sm font-semibold mb-4">
@@ -480,7 +485,7 @@ const MyQRCodes = ({ query, result, origin, organization }: {
                                   : copy("Destination")}
                               </p>
                               <code className="text-sm bg-muted px-2 py-1 rounded break-all">
-                                {getQRUrl(qr)}
+                                {qr.tracking_enabled ? getQRUrl(qr) : describeQRDestination(qr)}
                               </code>
                             </div>
                             <div>
@@ -488,7 +493,7 @@ const MyQRCodes = ({ query, result, origin, organization }: {
                                 {copy("Destination")}
                               </p>
                               <code className="text-sm bg-muted px-2 py-1 rounded break-all">
-                                {qr.destination_url}
+                                {describeQRDestination(qr)}
                               </code>
                             </div>
                             <div className="flex flex-wrap gap-2 pt-2">

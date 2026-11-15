@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
 import { pgSchema, uuid, text, timestamp, boolean, index, integer, varchar, jsonb, unique, uniqueIndex, primaryKey, foreignKey } from 'drizzle-orm/pg-core';
 import type { QRDesign } from '@/lib/qr-design';
+import type { QRContent } from '@/lib/qr-content';
 
 export const appSchema = pgSchema('qrconnect');
 const createdAt = () => timestamp('created_at', { withTimezone: true }).defaultNow().notNull();
@@ -75,6 +76,7 @@ export const qrCodes = appSchema.table('qr_codes', {
   title: varchar('title', { length: 255 }),
   qrType: varchar('qr_type', { length: 50 }).notNull().default('website'),
   design: jsonb('design').$type<QRDesign>(),
+  content: jsonb('content').$type<QRContent>(),
   trackingEnabled: boolean('tracking_enabled').notNull().default(true),
   isActive: boolean('is_active').notNull().default(true),
   folderId: uuid('folder_id').references(() => qrFolders.id, { onDelete: 'set null' }),
@@ -97,6 +99,18 @@ export const qrCodeLabels = appSchema.table('qr_code_labels', {
   index('qr_code_labels_label_idx').on(table.userId, table.labelId),
   foreignKey({ columns: [table.userId, table.qrCodeId], foreignColumns: [qrCodes.userId, qrCodes.id] }).onDelete('cascade'),
   foreignKey({ columns: [table.userId, table.labelId], foreignColumns: [qrLabels.userId, qrLabels.id] }).onDelete('cascade'),
+]).enableRLS();
+
+export const qrDestinationChanges = appSchema.table('qr_destination_changes', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull(),
+  qrCodeId: uuid('qr_code_id').notNull(),
+  previousUrl: text('previous_url').notNull(),
+  newUrl: text('new_url').notNull(),
+  changedAt: timestamp('changed_at', { withTimezone: true }).defaultNow().notNull(),
+}, table => [
+  index('qr_destination_changes_code_time_idx').on(table.userId, table.qrCodeId, table.changedAt),
+  foreignKey({ columns: [table.userId, table.qrCodeId], foreignColumns: [qrCodes.userId, qrCodes.id] }).onDelete('cascade'),
 ]).enableRLS();
 
 export const qrScans = appSchema.table('qr_scans', {

@@ -3,18 +3,20 @@ import { randomBytes } from "node:crypto";
 import { and, asc, count, desc, eq, exists, gte, ilike, inArray, isNull, lt, lte, ne, not, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { getDb } from "@/server/db";
-import { qrCodeLabels, qrCodes, qrFolders } from "@/server/db/schema";
+import { qrCodeLabels, qrCodes, qrDestinationChanges, qrFolders } from "@/server/db/schema";
 import { getServerEnv } from "@/server/env";
 import { HttpError } from "@/server/http";
 import type { QRCodeRecord } from "@/lib/qr-types";
 import { qrDesignSchema, hasVisibleContrast } from "@/lib/qr-design";
 import { qrFilterDate, qrPageSize, type QRFilterRule, type QRListQuery } from "@/lib/qr-list";
 import { safeDestination } from "@/lib/qr-destination";
+import { describeQRDestination, isStaticQRType, parseQRContent } from "@/lib/qr-content";
 
 export { safeDestination };
 const createInput = z
   .object({
-    destination_url: z.string().trim().max(2048).refine(safeDestination),
+    destination_url: z.string().trim().max(2048).refine(safeDestination).optional(),
+    content: z.unknown().optional(),
     title: z
       .string()
       .trim()
@@ -24,12 +26,13 @@ const createInput = z
       .optional(),
     qr_type: z.string().trim().min(1).max(50).default("website"),
     design: qrDesignSchema.refine(hasVisibleContrast).optional(),
-    tracking_enabled: z.boolean().default(true),
+    tracking_enabled: z.boolean().optional(),
   })
   .strict();
 const updateInput = z.union([
   z.object({ design: qrDesignSchema.refine(hasVisibleContrast) }).strict(),
   z.object({ is_active: z.boolean() }).strict(),
+  z.object({ destination_url: z.string().trim().max(2048) }).strict(),
 ]);
 
 export function qrRecord(row: typeof qrCodes.$inferSelect): QRCodeRecord {
@@ -41,6 +44,7 @@ export function qrRecord(row: typeof qrCodes.$inferSelect): QRCodeRecord {
     title: row.title,
     qr_type: row.qrType,
     design: row.design,
+    content: row.content,
     tracking_enabled: row.trackingEnabled,
     is_active: row.isActive,
     total_scans: row.totalScans,
@@ -150,6 +154,7 @@ export async function createCode(userId: string, input: unknown, options?: { rec
       400,
       "Provide a valid HTTP/HTTPS destination and QR details",
     );
+  const values = resolveCreateValues(parsed.data);
   for (let attempt = 0; attempt < 3; attempt++) {
     const shortCode = randomBytes(9).toString("base64url");
     const [row] = await getDb()
@@ -158,13 +163,8 @@ export async function createCode(userId: string, input: unknown, options?: { rec
         id: options?.recordId,
         userId,
         shortCode,
-        destinationUrl: new URL(parsed.data.destination_url).href,
-        title:
-          parsed.data.title ||
-          Array.from(parsed.data.destination_url).slice(0, 255).join(""),
-        qrType: parsed.data.qr_type,
+        ...values,
         design: parsed.data.design,
-        trackingEnabled: parsed.data.tracking_enabled,
       })
       .onConflictDoNothing()
       .returning();
@@ -176,6 +176,33 @@ export async function createCode(userId: string, input: unknown, options?: { rec
     }
   }
   throw new HttpError(503, "Unable to allocate a QR code. Please retry");
+}
+
+function resolveCreateValues(data: z.infer<typeof createInput>) {
+  const titleFrom = (value: string) => data.title || Array.from(value).slice(0, 255).join("");
+  if (data.content !== undefined) {
+    const parsed = parseQRContent(data.content);
+    if (!parsed || data.destination_url !== undefined)
+      throw new HttpError(400, "Provide valid content for this QR type");
+    if (data.tracking_enabled)
+      throw new HttpError(400, "Static QR types encode their content and cannot be tracked");
+    return {
+      destinationUrl: parsed.payload,
+      content: parsed.content,
+      qrType: parsed.content.type,
+      trackingEnabled: false,
+      title: titleFrom(describeQRDestination({ qr_type: parsed.content.type, destination_url: parsed.payload, content: parsed.content })),
+    };
+  }
+  if (!data.destination_url || isStaticQRType(data.qr_type))
+    throw new HttpError(400, "Provide a valid HTTP/HTTPS destination and QR details");
+  return {
+    destinationUrl: new URL(data.destination_url).href,
+    content: null,
+    qrType: data.qr_type,
+    trackingEnabled: data.tracking_enabled ?? true,
+    title: titleFrom(data.destination_url),
+  };
 }
 
 function codeResponse(row: typeof qrCodes.$inferSelect) {
@@ -205,6 +232,7 @@ export async function updateCode(
     throw new HttpError(404, "QR code not found");
   const parsed = updateInput.safeParse(input);
   if (!parsed.success) throw new HttpError(400, "Provide a valid QR design or tracking state");
+  if ("destination_url" in parsed.data) return changeDestination(userId, id, parsed.data.destination_url);
   const values = "design" in parsed.data
     ? { design: parsed.data.design }
     : { isActive: parsed.data.is_active };
@@ -220,6 +248,46 @@ export async function updateCode(
   if (!row) throw new HttpError(404, "QR code not found");
   return codeResponse(row);
 }
+async function changeDestination(userId: string, id: string, value: string) {
+  if (!safeDestination(value)) throw new HttpError(400, "Provide a valid HTTP/HTTPS destination");
+  const destination = new URL(value).href;
+  if (destination.length > 2048) throw new HttpError(400, "Provide a valid HTTP/HTTPS destination");
+  const row = await getDb().transaction(async (tx) => {
+    const [current] = await tx.select().from(qrCodes)
+      .where(and(eq(qrCodes.id, id), eq(qrCodes.userId, userId))).for("update");
+    if (!current) throw new HttpError(404, "QR code not found");
+    if (!current.trackingEnabled)
+      throw new HttpError(409, "Only trackable QR codes can change destination without a new code");
+    if (current.destinationUrl === destination)
+      throw new HttpError(409, "This QR code already uses that destination");
+    await tx.insert(qrDestinationChanges).values({
+      userId, qrCodeId: id, previousUrl: current.destinationUrl, newUrl: destination,
+    });
+    const [updated] = await tx.update(qrCodes)
+      .set({ destinationUrl: destination, updatedAt: new Date() })
+      .where(and(eq(qrCodes.id, id), eq(qrCodes.userId, userId)))
+      .returning();
+    return updated;
+  });
+  return codeResponse(row);
+}
+
+export async function listDestinationChanges(userId: string, id: string) {
+  await getCode(userId, id);
+  const rows = await getDb().select().from(qrDestinationChanges)
+    .where(and(eq(qrDestinationChanges.userId, userId), eq(qrDestinationChanges.qrCodeId, id)))
+    .orderBy(desc(qrDestinationChanges.changedAt), desc(qrDestinationChanges.id))
+    .limit(50);
+  return {
+    changes: rows.map((row) => ({
+      id: row.id,
+      previous_url: row.previousUrl,
+      new_url: row.newUrl,
+      changed_at: row.changedAt.toISOString(),
+    })),
+  };
+}
+
 export async function deleteCode(userId: string, id: string) {
   if (!z.string().uuid().safeParse(id).success)
     throw new HttpError(404, "QR code not found");

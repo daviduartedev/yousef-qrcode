@@ -679,3 +679,95 @@ test("CSV import persists valid rows once and reports invalid rows without acces
   assert.equal((await fetch(tracked.trackingUrl, { redirect: "manual" })).status, 302);
   assert.equal((await request("/api/qr-codes/" + outcome.rows[2].id, { cookie: other })).status, 404);
 });
+
+test("static QR types store structured content and encode the payload server-side", async () => {
+  const owner = await register();
+  const stranger = await register();
+  const create = (cookie, body) => request("/api/qr-codes", { method: "POST", cookie, body });
+  const wifi = await create(owner, {
+    content: { type: "wifi", ssid: "Office;5G", security: "WPA", password: "s3cret:pass" },
+    design: savedDesign,
+  });
+  assert.equal(wifi.status, 201);
+  const { qrCode, trackingUrl } = await wifi.json();
+  assert.equal(trackingUrl, null);
+  assert.equal(qrCode.qr_type, "wifi");
+  assert.equal(qrCode.tracking_enabled, false);
+  assert.equal(qrCode.destination_url, String.raw`WIFI:T:WPA;S:Office\;5G;P:s3cret\:pass;;`);
+  assert.equal(qrCode.title, "Wi-Fi · Office;5G");
+  assert.deepEqual(qrCode.content, { type: "wifi", ssid: "Office;5G", security: "WPA", password: "s3cret:pass", hidden: false });
+
+  const arabic = await (await create(owner, { title: "نص", content: { type: "text", text: "مرحبا" } })).json();
+  assert.equal(arabic.qrCode.destination_url, "مرحبا");
+  assert.equal(arabic.qrCode.title, "نص");
+  const phone = await (await create(owner, { content: { type: "phone", number: "+55 (11) 4000-1234" } })).json();
+  assert.equal(phone.qrCode.destination_url, "tel:+551140001234");
+
+  const rejected = [
+    { content: { type: "wifi", ssid: "Home", security: "WPA", password: "" } },
+    { content: { type: "text", text: "tracked" }, tracking_enabled: true },
+    { content: { type: "email", to: "team@example.com" }, destination_url: "https://example.test" },
+    { content: { type: "website", url: "https://example.test" } },
+    { qr_type: "text", destination_url: "https://example.test/not-static" },
+    { content: { type: "text", text: "م".repeat(700) } },
+  ];
+  for (const body of rejected) assert.equal((await create(owner, body)).status, 400, JSON.stringify(body).slice(0, 80));
+
+  const reopened = await request(`/api/qr-codes/${qrCode.id}`, { cookie: owner });
+  assert.deepEqual((await reopened.json()).qrCode.content, qrCode.content);
+  assert.equal((await request(`/api/qr-codes/${qrCode.id}`, { cookie: stranger })).status, 404);
+  const search = await (await request("/api/qr-codes/search?q=Office", { cookie: owner })).json();
+  assert.equal(JSON.stringify(search).includes("s3cret"), false);
+  const byPassword = await (await request("/api/qr-codes/search?q=s3cret", { cookie: owner })).json();
+  assert.equal(JSON.stringify(byPassword).includes(qrCode.id), false);
+  const overview = await (await request("/overview", { cookie: owner })).text();
+  assert.equal(overview.includes("s3cret"), false);
+  assert.equal((await request(`/api/qr-codes/${qrCode.id}`, {
+    cookie: owner, method: "PATCH", body: { destination_url: "https://example.test/new" },
+  })).status, 409);
+});
+
+test("tracked QR destination changes keep the URL, scans and an owner-only history", async () => {
+  const owner = await register();
+  const stranger = await register();
+  const created = await createManagedCode(owner, "Campaign", "https://example.test/first");
+  const { qrCode, trackingUrl } = created;
+  const first = await fetch(trackingUrl, { redirect: "manual" });
+  assert.equal(first.status, 302);
+  assert.equal(first.headers.get("location"), "https://example.test/first");
+
+  const change = (cookie, destination_url, origin) => request(`/api/qr-codes/${qrCode.id}`, {
+    cookie, method: "PATCH", body: { destination_url }, ...(origin ? { headers: { origin, "content-type": "application/json", cookie } } : {}),
+  });
+  assert.equal((await change(stranger, "https://example.test/hijack")).status, 404);
+  assert.equal((await change(owner, "https://example.test/x", "https://attacker.test")).status, 403);
+  assert.equal((await change(owner, "javascript:alert(1)")).status, 400);
+  assert.equal((await change(owner, "https://user:pw@example.test/")).status, 400);
+  assert.equal((await change(owner, "https://example.test/first")).status, 409);
+  const updated = await change(owner, "https://example.test/second?ref=qr");
+  assert.equal(updated.status, 200);
+  const body = await updated.json();
+  assert.equal(body.trackingUrl, trackingUrl);
+  assert.equal(body.qrCode.short_code, qrCode.short_code);
+  assert.equal(body.qrCode.destination_url, "https://example.test/second?ref=qr");
+
+  const second = await fetch(trackingUrl, { redirect: "manual" });
+  assert.equal(second.headers.get("location"), "https://example.test/second?ref=qr");
+  const reopened = await (await request(`/api/qr-codes/${qrCode.id}`, { cookie: owner })).json();
+  assert.equal(reopened.qrCode.total_scans, 2);
+
+  const history = await request(`/api/qr-codes/${qrCode.id}/destinations`, { cookie: owner });
+  assert.equal(history.status, 200);
+  assert.match(history.headers.get("cache-control"), /no-store/);
+  const { changes } = await history.json();
+  assert.equal(changes.length, 1);
+  assert.equal(changes[0].previous_url, "https://example.test/first");
+  assert.equal(changes[0].new_url, "https://example.test/second?ref=qr");
+  assert.equal((await request(`/api/qr-codes/${qrCode.id}/destinations`, { cookie: stranger })).status, 404);
+  assert.equal((await request(`/api/qr-codes/${qrCode.id}/destinations`)).status, 401);
+
+  const direct = await createManagedCode(owner, "Printed", "https://example.test/direct", false);
+  assert.equal((await request(`/api/qr-codes/${direct.qrCode.id}`, {
+    cookie: owner, method: "PATCH", body: { destination_url: "https://example.test/other" },
+  })).status, 409);
+});

@@ -80,22 +80,29 @@ test('a private backup restores records, design and scan history into a separate
   await source.db.query('UPDATE qrconnect.qr_codes SET folder_id = $1 WHERE id = $2', [folderId, qrId]);
   await source.db.query('INSERT INTO qrconnect.qr_labels (id, user_id, name) VALUES ($1, $2, $3)', [labelId, userId, 'Recovered label']);
   await source.db.query('INSERT INTO qrconnect.qr_code_labels (user_id, qr_code_id, label_id) VALUES ($1, $2, $3)', [userId, qrId, labelId]);
+  await source.db.query(`INSERT INTO qrconnect.qr_destination_changes (user_id, qr_code_id, previous_url, new_url)
+    VALUES ($1, $2, 'https://example.test/before-cutover', 'https://example.test/after-cutover')`, [userId, qrId]);
+  await source.db.query(`INSERT INTO qrconnect.qr_codes (user_id, short_code, destination_url, qr_type, content, tracking_enabled)
+    VALUES ($1, 'restore-static', 'tel:+15550100', 'phone', '{"type":"phone","number":"+15550100"}', false)`, [userId]);
   let result = source.run('backup', '--out', archive);
   assert.equal(result.status, 0, result.stderr);
   result = target.run('restore', '--from', archive);
   assert.equal(result.status, 0, result.stderr);
   const state = JSON.parse(result.stdout);
   assert.equal(state.counts.user, '1');
-  assert.equal(state.counts.qr_codes, '1');
+  assert.equal(state.counts.qr_codes, '2');
   assert.equal(state.counts.qr_scans, '1');
   assert.equal(state.counts.qr_folders, '1');
   assert.equal(state.counts.qr_labels, '1');
   assert.equal(state.counts.qr_code_labels, '1');
+  assert.equal(state.counts.qr_destination_changes, '1');
   assert.equal(state.rowSecurityEnabled, true);
   // SQL is the public output of a database restore, rather than an auth implementation detail.
-  const { rows } = await target.db.query('SELECT short_code, destination_url, design, tracking_enabled, total_scans FROM qrconnect.qr_codes');
+  const { rows } = await target.db.query('SELECT short_code, destination_url, design, content, tracking_enabled, total_scans FROM qrconnect.qr_codes ORDER BY short_code');
   assert.deepEqual(rows, [{ short_code: 'restore-fixture', destination_url: 'https://example.test/after-cutover',
-    design: { version: 1, fixture: 'after-cutover' }, tracking_enabled: false, total_scans: 1 }]);
+    design: { version: 1, fixture: 'after-cutover' }, content: null, tracking_enabled: false, total_scans: 1 },
+  { short_code: 'restore-static', destination_url: 'tel:+15550100', design: null,
+    content: { type: 'phone', number: '+15550100' }, tracking_enabled: false, total_scans: 0 }]);
   result = target.run('restore', '--from', archive);
   assert.equal(result.status, 1);
   assert.match(result.stderr, /never overwritten/i);

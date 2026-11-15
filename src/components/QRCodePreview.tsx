@@ -1,6 +1,6 @@
 import { useId, useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import qrcode from "qrcode-generator";
+import { qrMatrix, type ErrorCorrectionLevel } from "@/lib/qr-matrix";
 import {
   defaultDesign,
   hasVisibleContrast,
@@ -16,6 +16,7 @@ type Props = {
   width?: number;
   height?: number;
   id?: string;
+  errorCorrection?: ErrorCorrectionLevel;
 };
 
 function Paint({ id, paint }: { id: string; paint: QRPaint }) {
@@ -55,23 +56,15 @@ export default function QRCodePreview({
   width = 300,
   height,
   id,
+  errorCorrection = "H",
 }: Props) {
   const { t: copy } = useTranslation("copy");
   const uid = useId().replace(/[^a-zA-Z0-9_-]/g, "");
   const parsed = qrDesignSchema.safeParse(design);
-  const matrix = useMemo(() => {
-    if (!data) return null;
-    try {
-      const qr = qrcode(0, "H");
-      qr.addData(data, "Byte");
-      qr.make();
-      return Array.from({ length: qr.getModuleCount() }, (_, r) =>
-        Array.from({ length: qr.getModuleCount() }, (_, c) => qr.isDark(r, c)),
-      );
-    } catch {
-      return null;
-    }
-  }, [data]);
+  const matrix = useMemo(
+    () => qrMatrix(data, errorCorrection),
+    [data, errorCorrection],
+  );
   if (!data) return null;
   if (!parsed.success || !hasVisibleContrast(parsed.data) || !matrix)
     return (

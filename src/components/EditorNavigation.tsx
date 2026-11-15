@@ -12,6 +12,8 @@ import { usePathname, useRouter } from "next/navigation";
 import { useTranslation } from "react-i18next";
 import type { QRDesign } from "@/lib/qr-design";
 import type { QRCodeRecord } from "@/lib/qr-types";
+import type { ContentFields } from "./qr-wizard/content";
+import type { WizardType } from "./qr-wizard/QRTypeStep";
 import { Button } from "./ui/button";
 
 export interface EditorDraft {
@@ -21,6 +23,12 @@ export interface EditorDraft {
   design: QRDesign;
   tracking: boolean;
   tab: number;
+  wizard?: {
+    qrType: WizardType;
+    fields: ContentFields;
+    title: string;
+    step: "type" | "content" | "design" | "done";
+  };
   record: QRCodeRecord | null;
   baseline: string;
 }
