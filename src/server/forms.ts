@@ -8,6 +8,8 @@ import { HttpError } from '@/server/http';
 import { getServerEnv } from '@/server/env';
 import { createCode } from '@/server/qr-codes';
 import { visitorFrom } from '@/server/visitor';
+import { after } from 'next/server';
+import { emitAndDeliver } from '@/server/webhooks';
 import { claimSlug, slugFree } from '@/server/public-slugs';
 import { deactivateLinkedCodes } from '@/server/qr-linked-cleanup';
 import { csvCell, duplicateWindowSeconds } from '@/lib/qr-analytics';
@@ -226,6 +228,8 @@ export async function submitForm(request: Request, slug: string, input: unknown)
       consentText: form.content.consent.enabled ? form.content.consent.text : null, ipAddress: visitor.ipAddress,
     });
     await tx.insert(formEvents).values({ formId: form.id, kind: 'submit', deviceType: visitor.deviceType, ipAddress: visitor.ipAddress, userAgent: visitor.userAgent });
+    after(() => emitAndDeliver(form.userId, 'form.submitted', { form_id: form.id, title: form.content.title, submitted_at: new Date().toISOString(),
+      answers: form.content.fields.map(field => ({ id: field.id, label: field.label, value: answers[field.id] ?? null })) }));
     return { accepted: true };
   });
 }

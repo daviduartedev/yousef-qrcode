@@ -1883,3 +1883,118 @@ test("custom domains need a DNS TXT proof and only serve codes of their workspac
   assert.equal(pending.status, 201);
   assert.equal((await request("/api/domains", { method: "POST", cookie: owner, body: { hostname: `other-${hostname}` } })).status, 201, "an unverified claim does not block the real owner");
 });
+
+/** Local webhook receiver; answers with the next queued status (200 by default). */
+async function webhookReceiver() {
+  const { createServer } = await import("node:http");
+  const received = [];
+  const answers = [];
+  const server = createServer((req, res) => {
+    let body = "";
+    req.on("data", (chunk) => { body += chunk; });
+    req.on("end", () => { received.push({ headers: req.headers, body }); res.statusCode = answers.shift() ?? 200; res.end("ok"); });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  return { url: `http://127.0.0.1:${server.address().port}/hook`, received, answers, close: () => new Promise((resolve) => server.close(resolve)) };
+}
+const waitFor = async (predicate) => { for (let index = 0; index < 50 && !predicate(); index++) await new Promise((resolve) => setTimeout(resolve, 100)); };
+const v1 = (path, key, { method = "GET", body } = {}) => fetch(new URL(path, base), { method, headers: { authorization: `Bearer ${key}`, ...(body ? { "content-type": "application/json" } : {}) }, body: body ? JSON.stringify(body) : undefined });
+
+test("API keys are scoped to their workspace, revocable and rate limited", async () => {
+  const owner = await register();
+  const other = await register();
+  await request("/api/qr-codes", { method: "POST", cookie: owner, body: { title: "Owner code", destination_url: "https://example.test/o" } });
+  const theirs = (await (await request("/api/qr-codes", { method: "POST", cookie: other, body: { title: "Other code", destination_url: "https://example.test/x" } })).json()).qrCode;
+  const created = await request("/api/developers/keys", { method: "POST", cookie: owner, body: { name: "Reader", scopes: ["qr:read"] } });
+  assert.equal(created.status, 201);
+  const { key, apiKey } = await created.json();
+  assert.match(key, /^qrc_[a-z0-9]{12}_[A-Za-z0-9_-]{43}$/);
+  assert.doesNotMatch(JSON.stringify(await (await request("/api/developers/keys", { cookie: owner })).json()), new RegExp(key.split("_")[2]), "the secret is shown only once");
+  const list = await v1("/api/v1/qr-codes", key);
+  assert.equal(list.status, 200);
+  assert.equal(list.headers.get("x-ratelimit-limit"), "60");
+  assert.deepEqual((await list.json()).data.map((qr) => qr.title), ["Owner code"]);
+  assert.equal((await v1(`/api/v1/qr-codes/${theirs.id}`, key)).status, 404, "another workspace's code is not visible");
+  assert.equal((await v1("/api/v1/qr-codes", key, { method: "POST", body: { title: "x", destination_url: "https://example.test/" } })).status, 403, "read keys cannot write");
+  assert.equal((await v1("/api/v1/analytics", key)).status, 403);
+  assert.equal((await v1("/api/v1/qr-codes", "qrc_aaaaaaaaaaaa_" + "x".repeat(43))).status, 401);
+  assert.equal((await fetch(new URL("/api/v1/qr-codes", base))).status, 401);
+  assert.equal((await request("/api/v1/qr-codes", { cookie: owner })).status, 401, "a browser session is not an API key");
+
+  const writer = (await (await request("/api/developers/keys", { method: "POST", cookie: owner, body: { name: "Writer", scopes: ["qr:write", "analytics:read"] } })).json()).key;
+  const made = await v1("/api/v1/qr-codes", writer, { method: "POST", body: { title: "From API", destination_url: "https://example.test/api" } });
+  assert.equal(made.status, 201);
+  const madeId = (await made.json()).qrCode.id;
+  assert.equal((await v1(`/api/v1/qr-codes/${madeId}`, writer, { method: "PATCH", body: { is_active: false } })).status, 200);
+  assert.equal((await v1("/api/v1/analytics?from=2026-01-01&to=2026-01-31", writer)).status, 200);
+  assert.equal((await v1(`/api/v1/qr-codes/${theirs.id}`, writer, { method: "DELETE" })).status, 404);
+
+  assert.equal((await request(`/api/developers/keys/${apiKey.id}`, { method: "DELETE", cookie: other })).status, 404);
+  assert.equal((await request(`/api/developers/keys/${apiKey.id}`, { method: "DELETE", cookie: owner })).status, 200);
+  assert.equal((await v1("/api/v1/qr-codes", key)).status, 401, "revoked keys stop working");
+
+  let limited = null;
+  for (let index = 0; index < 70 && !limited; index++) { const response = await v1("/api/v1/qr-codes/" + madeId, writer.replace("x", "x")); if (response.status === 429) limited = response; }
+  if (!limited) for (let index = 0; index < 70 && !limited; index++) { const response = await v1("/api/v1/analytics", writer); if (response.status === 429) limited = response; }
+  assert.ok(limited, "the 61st request in a minute is refused");
+  assert.ok(Number(limited.headers.get("retry-after")) >= 1);
+});
+
+test("webhooks are signed, retried, redelivered with the same id and never reach private networks", async () => {
+  const { createHmac } = await import("node:crypto");
+  const owner = await register();
+  const other = await register();
+  const receiver = await webhookReceiver();
+  try {
+    assert.equal((await request("/api/developers/webhooks", { method: "POST", cookie: owner, body: { url: "https://10.0.0.5/hook", events: ["qr.scanned"] } })).status, 400);
+    assert.equal((await request("/api/developers/webhooks", { method: "POST", cookie: owner, body: { url: "http://example.com/hook", events: ["qr.scanned"] } })).status, 400, "plain HTTP is refused");
+    const created = await request("/api/developers/webhooks", { method: "POST", cookie: owner, body: { url: receiver.url, events: ["qr.scanned", "form.submitted"] } });
+    assert.equal(created.status, 201);
+    const { webhook, secret } = await created.json();
+    assert.match(secret, /^whsec_/);
+    assert.doesNotMatch(JSON.stringify(await (await request("/api/developers/webhooks", { cookie: owner })).json()), new RegExp(secret));
+
+    const qr = (await (await request("/api/qr-codes", { method: "POST", cookie: owner, body: { title: "Hooked", destination_url: "https://example.test/h" } })).json()).qrCode;
+    receiver.answers.push(500);
+    await request(`/qr?code=${qr.short_code}`, { headers: { "user-agent": "Mozilla/5.0 (iPhone) Mobile Safari" } });
+    await waitFor(() => receiver.received.length >= 1);
+    const first = receiver.received[0];
+    const [, timestamp, v1sig] = first.headers["qrconnect-signature"].match(/^t=(\d+),v1=([0-9a-f]{64})$/);
+    assert.equal(v1sig, createHmac("sha256", secret).update(`${timestamp}.${first.body}`).digest("hex"), "the signature matches the secret");
+    assert.ok(Math.abs(Date.now() / 1000 - Number(timestamp)) < 300);
+    const event = JSON.parse(first.body);
+    assert.equal(event.type, "qr.scanned");
+    assert.equal(event.data.qr_code_id, qr.id);
+    assert.equal(first.headers["qrconnect-event-id"], event.id);
+
+    const deliveries = await (await request(`/api/developers/webhooks/${webhook.id}`, { cookie: owner })).json();
+    const failed = deliveries.deliveries.find((item) => item.event === "qr.scanned");
+    assert.equal(failed.status, "pending");
+    assert.equal(failed.attempts, 1);
+    assert.equal(failed.last_status_code, 500);
+    assert.ok(failed.next_attempt_at, "a retry is scheduled");
+    assert.equal((await request(`/api/developers/deliveries/${failed.id}`, { method: "POST", cookie: other })).status, 404);
+    const again = await (await request(`/api/developers/deliveries/${failed.id}`, { method: "POST", cookie: owner })).json();
+    assert.equal(again.delivery.status, "delivered");
+    assert.equal(JSON.parse(receiver.received.at(-1).body).id, event.id, "redelivery keeps the event id");
+
+    const form = await newForm(owner, "blank");
+    await request(`/api/forms/${form.id}/publish`, { method: "POST", cookie: owner, body: { publish: true } });
+    await submit(form.slug, { answers: { [form.draft.fields[0].id]: "Webhook answer" } });
+    await waitFor(() => receiver.received.some((item) => JSON.parse(item.body).type === "form.submitted"));
+    const formEvent = JSON.parse(receiver.received.find((item) => JSON.parse(item.body).type === "form.submitted").body);
+    assert.equal(formEvent.data.answers[0].value, "Webhook answer");
+
+    await request(`/api/developers/webhooks/${webhook.id}`, { method: "PATCH", cookie: owner, body: { active: false } });
+    const before = receiver.received.length;
+    await request(`/qr?code=${qr.short_code}`, { headers: { "user-agent": "Mozilla/5.0 (Android) Mobile Chrome" } });
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    assert.equal(receiver.received.length, before, "paused webhooks receive nothing");
+    const ping = await (await request(`/api/developers/webhooks/${webhook.id}/ping`, { method: "POST", cookie: owner })).json();
+    assert.equal(ping.delivery.status, "delivered");
+    assert.equal((await request(`/api/developers/webhooks/${webhook.id}`, { cookie: other })).status, 404);
+    assert.equal((await request("/api/cron/webhooks")).status, 401, "the retry job needs its secret");
+  } finally {
+    await receiver.close();
+  }
+});

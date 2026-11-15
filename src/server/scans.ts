@@ -9,6 +9,8 @@ import { getServerEnv } from '@/server/env';
 import { duplicateWindowSeconds } from '@/lib/qr-analytics';
 import { roundCoordinate, scheduleOpen } from '@/lib/qr-rules';
 import { visitorFrom } from '@/server/visitor';
+import { after } from 'next/server';
+import { emitAndDeliver } from '@/server/webhooks';
 import { checkPassword, type StoredRules } from '@/server/qr-rules';
 
 const noCache = { 'Cache-Control': 'no-store, max-age=0', 'X-Robots-Tag': 'noindex, nofollow' };
@@ -48,19 +50,20 @@ async function usable(tx: Tx, host: string, code: string) {
 }
 
 /** Counts a scan; bots and repeats from the same trusted address within 10 s are skipped. */
+/** Returns the counted scan, or null when it was skipped (bot or repeat). */
 async function recordScan(tx: Tx, request: Request, qr: QRRow, location?: { latitude: number; longitude: number }) {
   const [{ count }] = await tx.select({ count: sql<number>`count(*)::int` }).from(qrScans)
     .where(and(eq(qrScans.qrCodeId, qr.id), gte(qrScans.scannedAt, sql`now() - interval '60 seconds'`)));
   if (count >= 300) throw new HttpError(429, 'Please try this QR code again shortly');
   const visitor = visitorFrom(request);
   const { userAgent, ipAddress } = visitor;
-  if (visitor.bot) return;
+  if (visitor.bot) return null;
   if (ipAddress) {
     const [{ repeats }] = await tx.select({ repeats: sql<number>`count(*)::int` }).from(qrScans).where(and(
       eq(qrScans.qrCodeId, qr.id), eq(qrScans.ipAddress, ipAddress), eq(qrScans.userAgent, userAgent),
       gte(qrScans.scannedAt, sql`now() - make_interval(secs => ${duplicateWindowSeconds})`),
     ));
-    if (repeats > 0) return;
+    if (repeats > 0) return null;
   }
   await tx.insert(qrScans).values({
     qrCodeId: qr.id, userAgent, deviceType: visitor.deviceType, os: visitor.os, browser: visitor.browser,
@@ -68,9 +71,17 @@ async function recordScan(tx: Tx, request: Request, qr: QRRow, location?: { lati
     latitude: location ? roundCoordinate(location.latitude) : null, longitude: location ? roundCoordinate(location.longitude) : null,
   });
   await tx.update(qrCodes).set({ totalScans: sql`${qrCodes.totalScans} + 1`, updatedAt: new Date() }).where(eq(qrCodes.id, qr.id));
+  return { workspaceId: qr.userId, data: { qr_code_id: qr.id, short_code: qr.shortCode, title: qr.title, device_type: visitor.deviceType, country: visitor.country, location_shared: Boolean(location) } };
 }
 
-type Outcome = { kind: 'redirect'; location: string } | { kind: 'closed'; reason: string };
+type CountedScan = Awaited<ReturnType<typeof recordScan>>;
+
+/** Webhooks for counted scans run after the response. */
+function announce(scan: CountedScan) {
+  if (scan) after(() => emitAndDeliver(scan.workspaceId, 'qr.scanned', { ...scan.data, scanned_at: new Date().toISOString() }));
+}
+
+type Outcome = { kind: 'redirect'; location: string; scan?: CountedScan } | { kind: 'closed'; reason: string };
 
 /** Outside its schedule a code sends people to the fallback, or explains that it is closed. */
 function scheduleOutcome(qr: QRRow): Outcome | null {
@@ -95,10 +106,11 @@ export async function scanAndRedirect(request: Request, record = true, pathCode?
       const rules = (qr.rules ?? {}) as StoredRules;
       // A password or a location question needs a page before the redirect; the scan is counted there.
       if (rules.passwordHash || rules.askLocation) return { kind: 'redirect', location: `${getServerEnv().appUrl}/qr/gate?code=${encodeURIComponent(qr.shortCode)}` };
-      if (record) await recordScan(tx, request, qr);
-      return { kind: 'redirect', location: new URL(qr.destinationUrl).href };
+      const scan = record ? await recordScan(tx, request, qr) : null;
+      return { kind: 'redirect', location: new URL(qr.destinationUrl).href, scan };
     });
     if (outcome.kind === 'closed') throw new HttpError(410, outcome.reason);
+    announce(outcome.scan ?? null);
     return new Response(null, { status: 302, headers: { ...noCache, Location: outcome.location } });
   } catch (error) {
     const known = error instanceof HttpError;
@@ -150,7 +162,7 @@ export async function unlockScan(request: Request, input: unknown) {
     const rules = (qr.rules ?? {}) as StoredRules;
     // The password may have changed between the check and the lock.
     if (rules.passwordHash !== previewRules.passwordHash) throw new HttpError(409, 'The QR code changed. Try again.');
-    await recordScan(tx, request, qr, rules.askLocation ? parsed.data.location : undefined);
+    announce(await recordScan(tx, request, qr, rules.askLocation ? parsed.data.location : undefined));
     return { destination: new URL(qr.destinationUrl).href };
   });
 }

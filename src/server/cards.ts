@@ -8,6 +8,8 @@ import { HttpError } from '@/server/http';
 import { getServerEnv } from '@/server/env';
 import { createCode } from '@/server/qr-codes';
 import { visitorFrom } from '@/server/visitor';
+import { after } from 'next/server';
+import { emitAndDeliver } from '@/server/webhooks';
 import { claimSlug, slugFree } from '@/server/public-slugs';
 import { deactivateLinkedCodes } from '@/server/qr-linked-cleanup';
 import { csvCell, duplicateWindowSeconds } from '@/lib/qr-analytics';
@@ -265,6 +267,8 @@ export async function submitCardContact(request: Request, slug: string, input: u
     });
     await tx.insert(cardEvents).values({ cardId: card.id, kind: 'contact', target: null, deviceType: visitor.deviceType, os: visitor.os,
       browser: visitor.browser, country: visitor.country, ipAddress: visitor.ipAddress, userAgent: visitor.userAgent });
+    after(() => emitAndDeliver(card.userId, 'card.contact', { card_id: card.id, received_at: new Date().toISOString(), name: parsed.data.name,
+      email: parsed.data.email || null, phone: parsed.data.phone || null, company: parsed.data.company || null, message: parsed.data.message || null }));
     return { accepted: true };
   });
 }
