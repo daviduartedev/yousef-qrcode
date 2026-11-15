@@ -1,4 +1,5 @@
-import { apiError, privateHeaders, requireApiUser } from '@/server/http';
+import { apiError, privateHeaders } from '@/server/http';
+import { requireApiWorkspace } from '@/server/workspace-session';
 import { readAssetFile } from '@/server/assets';
 import { assetMimeTypes, type AssetMimeType } from '@/lib/assets';
 
@@ -7,8 +8,8 @@ export const runtime = 'nodejs';
 /** Owner-only file bytes. The stored type was detected from the content, and the response cannot run as a page. */
 export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
-    const user = await requireApiUser(request);
-    const file = await readAssetFile(user.id, (await context.params).id);
+    const workspace = await requireApiWorkspace(request);
+    const file = await readAssetFile(workspace.id, (await context.params).id);
     if (!file) return Response.json({ error: 'File not found' }, { status: 404, headers: privateHeaders });
     const download = new URL(request.url).searchParams.get('download') === '1';
     // RFC 5987 encoding plus an ASCII fallback named with the stored type's extension.

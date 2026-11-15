@@ -66,5 +66,7 @@
   "Upload size is required": "يلزم تحديد حجم الرفع",
   "Request body is too large": "الطلب كبير جدًا",
   "Unable to complete this request": "تعذّر إكمال هذا الطلب",
-  "Show more": "عرض المزيد"
+  "Show more": "عرض المزيد",
+  "Confirm your email address before accepting the invitation": "أكّد بريدك الإلكتروني قبل قبول الدعوة",
+  "The workspace changed in another tab. Reload the page.": "تغيّرت مساحة العمل في علامة تبويب أخرى. أعد تحميل الصفحة."
 }

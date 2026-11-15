@@ -70,5 +70,7 @@
   "{{count}} files uploaded._one": "{{count}} file uploaded.",
   "Used by {{count}} QR codes_one": "Used by {{count}} QR code",
   "Delete \"{{name}}\"? {{count}} QR codes use it as a logo and will show no logo. Codes already printed keep working._one": "Delete \"{{name}}\"? {{count}} QR code uses it as a logo and will show no logo. Codes already printed keep working.",
-  "Show more": "Show more"
+  "Show more": "Show more",
+  "Confirm your email address before accepting the invitation": "Confirm your email address before accepting the invitation",
+  "The workspace changed in another tab. Reload the page.": "The workspace changed in another tab. Reload the page."
 }

@@ -1,12 +1,13 @@
 'use client';
 
-import { BarChart3, ChevronDown, CircleHelp, ClipboardList, Contact, Images, LayoutDashboard, Link2, PanelLeftClose, PanelLeftOpen, Plus, QrCode } from 'lucide-react';
+import { BarChart3, Building2, ChevronDown, CircleHelp, ClipboardList, Contact, Images, LayoutDashboard, Link2, PanelLeftClose, PanelLeftOpen, Plus, QrCode } from 'lucide-react';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { useId, useState, type MouseEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useEditorNavigation } from '@/components/EditorNavigation';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { readQRListQuery } from '@/lib/qr-list';
+import { WorkspaceSwitcher } from '@/components/WorkspaceSwitcher';
 
 const qrLinks = [
   { key: 'active', label: 'Active tracked codes', href: '/my-qrcodes?mode=tracked&status=active' },
@@ -52,6 +53,7 @@ export function WorkspaceNavigation({ id, collapsed = false, onFollow }: {
   }
 
   return <nav id={id} aria-label={copy('Workspace navigation')} className="grid gap-1">
+    {!collapsed && <WorkspaceSwitcher />}
     {item('/app', 'Create New', Plus, pathname === '/app',
       'mb-2 flex min-h-11 items-center justify-center gap-2 rounded-md bg-blue-700 px-3 text-sm font-semibold text-white outline-none hover:bg-blue-800 focus-visible:ring-2 focus-visible:ring-ring')}
     {item('/overview', 'Overview', LayoutDashboard, pathname === '/overview',
@@ -86,6 +88,8 @@ export function WorkspaceNavigation({ id, collapsed = false, onFollow }: {
       row + iconOnly + (pathname.startsWith('/forms') ? ' bg-background' : ''))}
     {item('/assets', 'Asset library', Images, pathname === '/assets',
       row + iconOnly + (pathname === '/assets' ? ' bg-background' : ''))}
+    {item('/settings/organization', 'Organization', Building2, pathname.startsWith('/settings'),
+      row + iconOnly + (pathname.startsWith('/settings') ? ' bg-background' : ''))}
     {item('/app#how-to-create', 'QR Code guide', CircleHelp, false, row + iconOnly + ' mt-2')}
   </nav>;
 }

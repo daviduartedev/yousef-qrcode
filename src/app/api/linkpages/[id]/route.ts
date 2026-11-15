@@ -1,4 +1,5 @@
-import { apiError, privateHeaders, readJson, requireApiUser, requireSameOrigin } from '@/server/http';
+import { apiError, privateHeaders, readJson, requireSameOrigin } from '@/server/http';
+import { requireApiWorkspace } from '@/server/workspace-session';
 import { deleteLinkpage, getLinkpage, updateLinkpage } from '@/server/linkpages';
 
 export const runtime = 'nodejs';
@@ -9,23 +10,23 @@ const draftLimit = 64 * 1024;
 
 export async function GET(request: Request, context: Context) {
   try {
-    const user = await requireApiUser(request);
-    return Response.json({ linkpage: await getLinkpage(user.id, (await context.params).id) }, { headers: privateHeaders });
+    const workspace = await requireApiWorkspace(request);
+    return Response.json({ linkpage: await getLinkpage(workspace.id, (await context.params).id) }, { headers: privateHeaders });
   } catch (error) { return apiError(error); }
 }
 
 export async function PATCH(request: Request, context: Context) {
   try {
     requireSameOrigin(request);
-    const user = await requireApiUser(request);
-    return Response.json({ linkpage: await updateLinkpage(user.id, (await context.params).id, await readJson(request, draftLimit)) }, { headers: privateHeaders });
+    const workspace = await requireApiWorkspace(request);
+    return Response.json({ linkpage: await updateLinkpage(workspace.id, (await context.params).id, await readJson(request, draftLimit)) }, { headers: privateHeaders });
   } catch (error) { return apiError(error); }
 }
 
 export async function DELETE(request: Request, context: Context) {
   try {
     requireSameOrigin(request);
-    const user = await requireApiUser(request);
-    return Response.json(await deleteLinkpage(user.id, (await context.params).id), { headers: privateHeaders });
+    const workspace = await requireApiWorkspace(request);
+    return Response.json(await deleteLinkpage(workspace.id, (await context.params).id), { headers: privateHeaders });
   } catch (error) { return apiError(error); }
 }

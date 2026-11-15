@@ -55,13 +55,13 @@ export const verification = appSchema.table('verification', {
 
 export const qrFolders = appSchema.table('qr_folders', {
   id: uuid('id').primaryKey().defaultRandom(),
-  userId: uuid('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
   name: varchar('name', { length: 80 }).notNull(),
 }, table => [uniqueIndex('qr_folders_user_name_idx').on(table.userId, sql`lower(${table.name})`)]).enableRLS();
 
 export const qrLabels = appSchema.table('qr_labels', {
   id: uuid('id').primaryKey().defaultRandom(),
-  userId: uuid('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
   name: varchar('name', { length: 80 }).notNull(),
 }, table => [
   unique('qr_labels_user_id_unique').on(table.userId, table.id),
@@ -70,7 +70,7 @@ export const qrLabels = appSchema.table('qr_labels', {
 
 export const qrCodes = appSchema.table('qr_codes', {
   id: uuid('id').primaryKey().defaultRandom(),
-  userId: uuid('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
   shortCode: varchar('short_code', { length: 20 }).notNull().unique(),
   destinationUrl: text('destination_url').notNull(),
   title: varchar('title', { length: 255 }),
@@ -139,7 +139,7 @@ const bytea = customType<{ data: Buffer; driverData: Buffer }>({ dataType: () =>
 
 export const assetFolders = appSchema.table('asset_folders', {
   id: uuid('id').primaryKey().defaultRandom(),
-  userId: uuid('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
   name: varchar('name', { length: 80 }).notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 }, table => [unique('asset_folders_user_name_unique').on(table.userId, table.name), unique('asset_folders_user_id_unique').on(table.userId, table.id)]).enableRLS();
@@ -147,7 +147,7 @@ export const assetFolders = appSchema.table('asset_folders', {
 /** Uploaded media. File bytes live in Postgres so the hosted app needs no extra storage provider. */
 export const assets = appSchema.table('assets', {
   id: uuid('id').primaryKey().defaultRandom(),
-  userId: uuid('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
   folderId: uuid('folder_id'),
   name: varchar('name', { length: 120 }).notNull(),
   kind: varchar('kind', { length: 16 }).notNull(),
@@ -168,7 +168,7 @@ export const assets = appSchema.table('assets', {
 /** A Linkpage keeps a private draft and the last published copy; the public URL is `/p/<slug>`. */
 export const linkPages = appSchema.table('link_pages', {
   id: uuid('id').primaryKey().defaultRandom(),
-  userId: uuid('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
   slug: varchar('slug', { length: 40 }).notNull().unique(),
   title: varchar('title', { length: 80 }).notNull(),
   template: varchar('template', { length: 32 }).notNull(),
@@ -204,14 +204,14 @@ export const linkPageEvents = appSchema.table('link_page_events', {
 export const publicSlugs = appSchema.table('public_slugs', {
   kind: varchar('kind', { length: 16 }).notNull(),
   slug: varchar('slug', { length: 40 }).notNull(),
-  userId: uuid('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 }, table => [primaryKey({ columns: [table.kind, table.slug] })]).enableRLS();
 
 /** Digital business card: private draft and published copy, public at `/c/<slug>`. */
 export const cards = appSchema.table('cards', {
   id: uuid('id').primaryKey().defaultRandom(),
-  userId: uuid('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
   slug: varchar('slug', { length: 40 }).notNull().unique(),
   title: varchar('title', { length: 80 }).notNull(),
   creationKey: uuid('creation_key').notNull(),
@@ -264,7 +264,7 @@ export const cardContacts = appSchema.table('card_contacts', {
 /** A form with a private draft and the published copy that receives answers at `/f/<slug>`. */
 export const forms = appSchema.table('forms', {
   id: uuid('id').primaryKey().defaultRandom(),
-  userId: uuid('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
   slug: varchar('slug', { length: 40 }).notNull().unique(),
   title: varchar('title', { length: 120 }).notNull(),
   template: varchar('template', { length: 32 }).notNull(),
@@ -307,3 +307,36 @@ export const formEvents = appSchema.table('form_events', {
   ipAddress: varchar('ip_address', { length: 64 }),
   userAgent: varchar('user_agent', { length: 1024 }).notNull(),
 }, table => [index('form_events_form_time_idx').on(table.formId, table.occurredAt)]).enableRLS();
+
+/**
+ * Owners of content. Every account has a personal workspace with the same id as the account,
+ * so content created before organizations keeps its owner. Organizations are workspaces with members.
+ */
+export const workspaces = appSchema.table('workspaces', {
+  id: uuid('id').primaryKey(),
+  name: varchar('name', { length: 80 }).notNull(),
+  kind: varchar('kind', { length: 16 }).notNull(),
+  createdBy: uuid('created_by').references(() => user.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}).enableRLS();
+
+export const workspaceMembers = appSchema.table('workspace_members', {
+  workspaceId: uuid('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  role: varchar('role', { length: 16 }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, table => [primaryKey({ columns: [table.workspaceId, table.userId] }), index('workspace_members_user_idx').on(table.userId)]).enableRLS();
+
+/** Pending invitations; only a hash of the token is stored. */
+export const workspaceInvitations = appSchema.table('workspace_invitations', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  workspaceId: uuid('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+  email: varchar('email', { length: 254 }).notNull(),
+  role: varchar('role', { length: 16 }).notNull(),
+  tokenHash: varchar('token_hash', { length: 64 }).notNull().unique(),
+  invitedBy: uuid('invited_by').references(() => user.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  acceptedAt: timestamp('accepted_at', { withTimezone: true }),
+  revokedAt: timestamp('revoked_at', { withTimezone: true }),
+}, table => [index('workspace_invitations_workspace_idx').on(table.workspaceId)]).enableRLS();

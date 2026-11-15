@@ -151,5 +151,7 @@
   "Submit button text": "نص زر الإرسال",
   "{{responses}} answers · {{views}} views in 30 days": "{{responses}} إجابة · {{views}} مشاهدة خلال 30 يومًا",
   "Reload the page and send again": "أعد تحميل الصفحة وأرسل مرة أخرى",
-  "(edited)": "(معدّل)"
+  "(edited)": "(معدّل)",
+  "Confirm your email address before accepting the invitation": "أكّد بريدك الإلكتروني قبل قبول الدعوة",
+  "The workspace changed in another tab. Reload the page.": "تغيّرت مساحة العمل في علامة تبويب أخرى. أعد تحميل الصفحة."
 }

@@ -1,5 +1,6 @@
 'use client';
 import { assetLimits, type AssetRecord } from '@/lib/assets';
+import { workspaceHeaders } from '@/lib/workspace-client';
 
 /** Messages are English keys of the `assets` namespace. */
 export async function uploadAssetFile(file: File, folderId: string | null): Promise<{ asset: AssetRecord } | { error: string }> {
@@ -8,7 +9,7 @@ export async function uploadAssetFile(file: File, folderId: string | null): Prom
   form.set('file', file);
   if (folderId) form.set('folder_id', folderId);
   try {
-    const response = await fetch('/api/assets', { method: 'POST', body: form, credentials: 'same-origin' });
+    const response = await fetch('/api/assets', { method: 'POST', body: form, credentials: 'same-origin', headers: workspaceHeaders() });
     const body = await response.json().catch(() => ({}));
     if (!response.ok) return { error: typeof body.error === 'string' ? body.error : 'Upload failed. Try again.' };
     return { asset: body.asset as AssetRecord };
@@ -21,7 +22,7 @@ export async function assetRequest(path: string, method: 'PATCH' | 'DELETE' | 'P
   try {
     const response = await fetch(path, {
       method, credentials: 'same-origin',
-      headers: body === undefined ? undefined : { 'content-type': 'application/json' },
+      headers: body === undefined ? workspaceHeaders() : { 'content-type': 'application/json', ...workspaceHeaders() },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
     const value = await response.json().catch(() => ({}));

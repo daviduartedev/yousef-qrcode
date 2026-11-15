@@ -1,6 +1,7 @@
 import type { QRAnalyticsResponse, QRCodeRecord, QRDestinationChange } from "./qr-types";
 import type { QRContent } from "./qr-content";
 import type { QRDesign } from "./qr-design";
+import { workspaceHeaders } from "@/lib/workspace-client";
 
 export class QRRequestError extends Error {
   constructor(public readonly status: number) {
@@ -11,7 +12,7 @@ export class QRRequestError extends Error {
 async function api<T>(path: string, options?: RequestInit): Promise<T> {
   const response = await fetch(path, {
     ...options,
-    headers: { "content-type": "application/json", ...options?.headers },
+    headers: { "content-type": "application/json", ...workspaceHeaders(), ...options?.headers },
     cache: "no-store",
   });
   if (!response.ok)

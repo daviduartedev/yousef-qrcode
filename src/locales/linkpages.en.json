@@ -139,5 +139,7 @@
   "Unable to complete this request": "Unable to complete this request",
   "The address is fixed after the first publication or QR code so shared links and printed QR codes keep working.": "The address is fixed after the first publication or QR code so shared links and printed QR codes keep working.",
   "You can change the address until you publish or create a QR code.": "You can change the address until you publish or create a QR code.",
-  "The address cannot change after the page was published or got a QR code": "The address cannot change after the page was published or got a QR code"
+  "The address cannot change after the page was published or got a QR code": "The address cannot change after the page was published or got a QR code",
+  "Confirm your email address before accepting the invitation": "Confirm your email address before accepting the invitation",
+  "The workspace changed in another tab. Reload the page.": "The workspace changed in another tab. Reload the page."
 }

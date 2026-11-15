@@ -7,7 +7,7 @@ import { getServerEnv } from '@/server/env';
 import { getDb } from '@/server/db';
 import { accountEmailDispatches } from '@/server/db/schema';
 
-export type AccountEmail = { kind: 'reset-password' | 'verify-email'; to: string; url: string };
+export type AccountEmail = { kind: 'reset-password' | 'verify-email' | 'invitation'; to: string; url: string };
 
 /** Per account and kind: at most 3 messages in 15 minutes and 10 in a day. */
 export const emailLimits = { shortWindowMinutes: 15, shortWindowMax: 3, dayMax: 10 } as const;
@@ -19,6 +19,11 @@ const content = {
     subject: 'Reset your QRConnect password · إعادة تعيين كلمة مرور QRConnect',
     en: 'Someone asked to reset the password of your QRConnect account. Open this link within one hour to choose a new password. If it was not you, ignore this email.',
     ar: 'طلب أحدهم إعادة تعيين كلمة مرور حسابك في QRConnect. افتح هذا الرابط خلال ساعة واحدة لاختيار كلمة مرور جديدة. إذا لم تكن أنت، فتجاهل هذه الرسالة.',
+  },
+  invitation: {
+    subject: 'You are invited to a QRConnect organization · دعوة إلى مؤسسة في QRConnect',
+    en: 'You were invited to join an organization on QRConnect. Open this link within 7 days and sign in with this email address to accept. If you did not expect it, ignore this email.',
+    ar: 'تمت دعوتك للانضمام إلى مؤسسة في QRConnect. افتح هذا الرابط خلال 7 أيام وسجّل الدخول بهذا البريد الإلكتروني لقبول الدعوة. إذا لم تكن تتوقعها، فتجاهل هذه الرسالة.',
   },
   'verify-email': {
     subject: 'Confirm your QRConnect email · تأكيد بريدك في QRConnect',

@@ -21,6 +21,8 @@ import enCards from './locales/cards.en.json';
 import arCards from './locales/cards.ar.json';
 import enForms from './locales/forms.en.json';
 import arForms from './locales/forms.ar.json';
+import enOrganizations from './locales/organizations.en.json';
+import arOrganizations from './locales/organizations.ar.json';
 
 i18n
   .use(initReactI18next)
@@ -37,6 +39,7 @@ i18n
         linkpages: enLinkpages,
         cards: enCards,
         forms: enForms,
+        organizations: enOrganizations,
       },
       ar: {
         translation: arTranslations,
@@ -49,6 +52,7 @@ i18n
         linkpages: arLinkpages,
         cards: arCards,
         forms: arForms,
+        organizations: arOrganizations,
       },
     },
     lng: 'en',

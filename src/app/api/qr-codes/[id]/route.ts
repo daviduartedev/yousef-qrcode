@@ -1,11 +1,11 @@
 import { deleteCode, getCode, updateCode } from "@/server/qr-codes";
 import {
-  requireApiUser,
   requireSameOrigin,
   readJson,
   apiError,
   privateHeaders,
 } from "@/server/http";
+import { requireApiWorkspace } from "@/server/workspace-session";
 export const runtime = "nodejs";
 
 export async function GET(
@@ -13,8 +13,8 @@ export async function GET(
   context: { params: Promise<{ id: string }> },
 ) {
   try {
-    const user = await requireApiUser(request);
-    return Response.json(await getCode(user.id, (await context.params).id), {
+    const workspace = await requireApiWorkspace(request);
+    return Response.json(await getCode(workspace.id, (await context.params).id), {
       headers: privateHeaders,
     });
   } catch (error) {
@@ -27,10 +27,10 @@ export async function PATCH(
 ) {
   try {
     requireSameOrigin(request);
-    const user = await requireApiUser(request);
+    const workspace = await requireApiWorkspace(request);
     return Response.json(
       await updateCode(
-        user.id,
+        workspace.id,
         (await context.params).id,
         await readJson(request),
       ),
@@ -47,8 +47,8 @@ export async function DELETE(
 ) {
   try {
     requireSameOrigin(request);
-    const user = await requireApiUser(request);
-    return Response.json(await deleteCode(user.id, (await context.params).id), {
+    const workspace = await requireApiWorkspace(request);
+    return Response.json(await deleteCode(workspace.id, (await context.params).id), {
       headers: privateHeaders,
     });
   } catch (error) {

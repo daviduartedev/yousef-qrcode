@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
-import { requirePageSession } from '@/server/session';
+import { requirePageWorkspace } from '@/server/workspace-session';
 import { requestedPath } from '@/lib/auth-paths';
 import { cardAnalytics } from '@/server/card-analytics';
 import { readAnalyticsQuery } from '@/lib/qr-analytics';
@@ -15,11 +15,11 @@ type Props = { params: Promise<{ id: string }>; searchParams: Promise<Record<str
 export default async function CardAnalyticsPage({ params, searchParams }: Props) {
   const { id } = await params;
   const raw = await searchParams;
-  const { user } = await requirePageSession(requestedPath(`/cards/${encodeURIComponent(id)}/analytics`, raw));
+  const { workspace } = await requirePageWorkspace(requestedPath(`/cards/${encodeURIComponent(id)}/analytics`, raw));
   const query = new URLSearchParams();
   for (const [key, value] of Object.entries(raw)) if (typeof value === 'string') query.set(key, value);
   const today = new Date().toISOString().slice(0, 10);
-  const data = await cardAnalytics(user.id, id, readAnalyticsQuery(query, today)).catch(error => { if (error instanceof HttpError && error.status === 404) return null; throw error; });
+  const data = await cardAnalytics(workspace.id, id, readAnalyticsQuery(query, today)).catch(error => { if (error instanceof HttpError && error.status === 404) return null; throw error; });
   if (!data) notFound();
   return <CardAnalytics data={data} today={today} />;
 }
