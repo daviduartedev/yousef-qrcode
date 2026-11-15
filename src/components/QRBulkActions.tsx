@@ -15,6 +15,7 @@ import { makeQRArchive } from "@/lib/qr-zip";
 import { qrBulkLabelLimit } from "@/lib/qr-list";
 import type { QRCodeRecord } from "@/lib/qr-types";
 import { getQRCode } from "@/lib/qrTracking";
+import { loadAssetImage } from "@/lib/asset-image";
 
 const messages = {
   en: {
@@ -92,9 +93,14 @@ async function downloadSelected(
         const data = qrCode.tracking_enabled
           ? trackingUrl ?? (origin + "/qr?code=" + encodeURIComponent(qrCode.short_code))
           : qrCode.destination_url;
+        const logoAssetId = qrCode.design?.logoAssetId;
+        const logoImage = logoAssetId ? await loadAssetImage(logoAssetId) : undefined;
+        if (logoAssetId && !logoImage) throw new Error("Library logo is unavailable");
+        signal.throwIfAborted();
         flushSync(() => root.render(<QRCodePreview
           data={data}
           design={qrCode.design ?? undefined}
+          logoImage={logoImage}
         />));
         const image = await exportQRBlob(container.querySelector("svg"), format);
         entries.push({ name: `qr-${qrCode.short_code}.${format}`, image });

@@ -50,6 +50,13 @@
       "when": 1794758626849,
       "tag": "0006_account_email_dispatches",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1794759296141,
+      "tag": "0007_asset_library",
+      "breakpoints": true
     }
   ]
 }

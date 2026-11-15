@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { pgSchema, uuid, text, timestamp, boolean, index, integer, varchar, jsonb, unique, uniqueIndex, primaryKey, foreignKey } from 'drizzle-orm/pg-core';
+import { customType, pgSchema, uuid, text, timestamp, boolean, index, integer, varchar, jsonb, unique, uniqueIndex, primaryKey, foreignKey } from 'drizzle-orm/pg-core';
 import type { QRDesign } from '@/lib/qr-design';
 import type { QRContent } from '@/lib/qr-content';
 
@@ -134,3 +134,33 @@ export const accountEmailDispatches = appSchema.table('account_email_dispatches'
   kind: varchar('kind', { length: 32 }).notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 }, table => [index('account_email_dispatches_user_kind_time_idx').on(table.userId, table.kind, table.createdAt)]).enableRLS();
+
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({ dataType: () => 'bytea' });
+
+export const assetFolders = appSchema.table('asset_folders', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  name: varchar('name', { length: 80 }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, table => [unique('asset_folders_user_name_unique').on(table.userId, table.name), unique('asset_folders_user_id_unique').on(table.userId, table.id)]).enableRLS();
+
+/** Uploaded media. File bytes live in Postgres so the hosted app needs no extra storage provider. */
+export const assets = appSchema.table('assets', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  folderId: uuid('folder_id'),
+  name: varchar('name', { length: 120 }).notNull(),
+  kind: varchar('kind', { length: 16 }).notNull(),
+  mimeType: varchar('mime_type', { length: 64 }).notNull(),
+  sizeBytes: integer('size_bytes').notNull(),
+  width: integer('width'),
+  height: integer('height'),
+  sha256: varchar('sha256', { length: 64 }).notNull(),
+  content: bytea('content').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, table => [
+  index('assets_user_created_idx').on(table.userId, table.createdAt),
+  unique('assets_user_id_unique').on(table.userId, table.id),
+  foreignKey({ columns: [table.userId, table.folderId], foreignColumns: [assetFolders.userId, assetFolders.id] }),
+]).enableRLS();

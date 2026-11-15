@@ -13,6 +13,8 @@ import enAnalytics from './locales/analytics.en.json';
 import arAnalytics from './locales/analytics.ar.json';
 import enEntry from './locales/entry.en.json';
 import arEntry from './locales/entry.ar.json';
+import enAssets from './locales/assets.en.json';
+import arAssets from './locales/assets.ar.json';
 
 i18n
   .use(initReactI18next)
@@ -25,6 +27,7 @@ i18n
         creation: enCreation,
         analytics: enAnalytics,
         entry: enEntry,
+        assets: enAssets,
       },
       ar: {
         translation: arTranslations,
@@ -33,6 +36,7 @@ i18n
         creation: arCreation,
         analytics: arAnalytics,
         entry: arEntry,
+        assets: arAssets,
       },
     },
     lng: 'en',

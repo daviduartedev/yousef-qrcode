@@ -8,6 +8,7 @@ import { getServerEnv } from "@/server/env";
 import { HttpError } from "@/server/http";
 import type { QRCodeRecord } from "@/lib/qr-types";
 import { qrDesignSchema, hasVisibleContrast } from "@/lib/qr-design";
+import { ownsImageAsset } from "@/server/assets";
 import { qrFilterDate, qrPageSize, type QRFilterRule, type QRListQuery } from "@/lib/qr-list";
 import { safeDestination } from "@/lib/qr-destination";
 import { lifecycleExpression } from "@/server/lifecycle";
@@ -149,6 +150,10 @@ export async function listCodePage(userId: string, query: QRListQuery) {
     return { qrCodes: rows.map(row => ({ ...qrRecord(row), label_ids: labelsByCode.get(row.id) ?? [] })), total, page, pages };
   }, { isolationLevel: 'repeatable read', accessMode: 'read only' });
 }
+/** A library logo must be an image owned by the same account. */
+async function assertLogoAsset(userId: string, design: { logoAssetId?: string | null } | undefined) {
+  if (design?.logoAssetId && !(await ownsImageAsset(userId, design.logoAssetId))) throw new HttpError(400, "The selected logo is not in your library");
+}
 export async function createCode(userId: string, input: unknown, options?: { recordId?: string }) {
   const parsed = createInput.safeParse(input);
   if (!parsed.success)
@@ -157,6 +162,7 @@ export async function createCode(userId: string, input: unknown, options?: { rec
       "Provide a valid HTTP/HTTPS destination and QR details",
     );
   const values = resolveCreateValues(parsed.data);
+  await assertLogoAsset(userId, parsed.data.design);
   for (let attempt = 0; attempt < 3; attempt++) {
     const shortCode = randomBytes(9).toString("base64url");
     const [row] = await getDb()
@@ -235,6 +241,7 @@ export async function updateCode(
   const parsed = updateInput.safeParse(input);
   if (!parsed.success) throw new HttpError(400, "Provide a valid QR design or tracking state");
   if ("destination_url" in parsed.data) return changeDestination(userId, id, parsed.data.destination_url);
+  if ("design" in parsed.data) await assertLogoAsset(userId, parsed.data.design);
   const values = "design" in parsed.data
     ? { design: parsed.data.design }
     : { isActive: parsed.data.is_active };
