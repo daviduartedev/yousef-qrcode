@@ -132,7 +132,7 @@ export async function publishLinkpage(userId: string, pageId: string, publish: b
     if (!draft.data.profile.name.trim() && draft.data.blocks.length === 0) throw new HttpError(400, 'Add a name or at least one block before publishing');
   }
   const [updated] = await getDb().update(linkPages).set(publish
-    ? { published: row.draft, isPublished: true, publishedAt: new Date(), updatedAt: new Date() }
+    ? { published: sql`draft`, isPublished: true, publishedAt: new Date(), updatedAt: new Date() }
     : { isPublished: false, updatedAt: new Date() })
     .where(and(eq(linkPages.userId, userId), eq(linkPages.id, pageId))).returning();
   return record(updated);

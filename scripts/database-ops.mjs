@@ -10,7 +10,7 @@ class OperationError extends Error {}
 const tables = ['user', 'account', 'session', 'verification', 'qr_codes', 'qr_scans'];
 const organizationTables = ['qr_folders', 'qr_labels', 'qr_code_labels'];
 // Tables added by later migrations (0005+). Each is verified when present, so older schemas remain valid backup sources.
-const laterTables = ['qr_destination_changes', 'account_email_dispatches', 'asset_folders', 'assets', 'link_pages', 'link_page_events', 'public_slugs', 'cards', 'card_events', 'card_contacts'];
+const laterTables = ['qr_destination_changes', 'account_email_dispatches', 'asset_folders', 'assets', 'link_pages', 'link_page_events', 'public_slugs', 'cards', 'card_events', 'card_contacts', 'forms', 'form_responses', 'form_events'];
 
 function backupDirectory(input, create = false) {
   if (!input) throw new OperationError('Provide a private backup directory.');

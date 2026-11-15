@@ -1433,3 +1433,102 @@ test("contact exchange stores consent, rejects abuse and stays private to the ca
   await request(`/api/cards/${card.id}/publish`, { method: "POST", cookie: owner, body: { publish: true } });
   assert.equal((await send({ name: "Ana", email: "ana@example.com", consent: true })).status, 404);
 });
+
+async function newForm(cookie, template = "contact") {
+  const response = await request("/api/forms", { method: "POST", cookie, body: { template, creation_key: randomUUID() } });
+  assert.equal(response.status, 201);
+  return (await response.json()).form;
+}
+const formTokens = new Map();
+/** The public page renders a signed token that must be at least two seconds old when answers are sent. */
+async function formToken(slug) {
+  if (!formTokens.has(slug)) {
+    const html = await (await request(`/f/${slug}`)).text();
+    const token = html.match(/\\?"token\\?":\\?"(\d+\.[A-Za-z0-9_-]+)\\?"/)?.[1];
+    assert.ok(token, "form page renders a submission token");
+    formTokens.set(slug, token);
+    await new Promise((resolve) => setTimeout(resolve, 2100));
+  }
+  return formTokens.get(slug);
+}
+const submit = async (slug, body, headers = {}) => request(`/f/${slug}/submit`, { method: "POST", body: { form_token: await formToken(slug).catch(() => undefined), ...body }, headers: { origin: base, "content-type": "application/json", ...headers } });
+
+test("forms publish, accept valid answers without an account and stay private to the owner", async () => {
+  const owner = await register();
+  const other = await register();
+  const key = randomUUID();
+  const first = await request("/api/forms", { method: "POST", cookie: owner, body: { template: "contact", creation_key: key } });
+  const again = await request("/api/forms", { method: "POST", cookie: owner, body: { template: "contact", creation_key: key } });
+  assert.equal(first.status, 201);
+  assert.equal(again.status, 200);
+  const form = (await first.json()).form;
+  const [name, email, phone, message] = form.draft.fields;
+  assert.equal((await request(`/f/${form.slug}/submit`, { method: "POST", body: { answers: {} } })).status, 404, "drafts do not accept answers");
+  for (const [method, path, body] of [["GET", ""], ["PATCH", "", { title: "x" }], ["DELETE", ""], ["POST", "/publish", { publish: true }], ["POST", "/qr"], ["GET", "/responses"]]) {
+    assert.equal((await request(`/api/forms/${form.id}${path}`, { method, cookie: other, body })).status, 404, `${method} ${path}`);
+  }
+  assert.equal((await request(`/api/forms/${form.id}/publish`, { method: "POST", cookie: owner, body: { publish: true } })).status, 200);
+  assert.match(await (await request(`/f/${form.slug}`)).text(), /Contact us/);
+
+  const html = await (await request(`/f/${form.slug}`)).text();
+  const fresh = html.match(/\\?"token\\?":\\?"(\d+\.[A-Za-z0-9_-]+)\\?"/)?.[1];
+  const tooFast = await request(`/f/${form.slug}/submit`, { method: "POST", body: { form_token: fresh, answers: { [name.id]: "Ana", [email.id]: "ana@example.com", [message.id]: "Hi" }, consent: true } });
+  assert.equal(tooFast.status, 400, "a page loaded less than two seconds ago cannot submit");
+  assert.equal((await request(`/f/${form.slug}/submit`, { method: "POST", body: { form_token: "1.forged", answers: {} } })).status, 400);
+  const invalid = await submit(form.slug, { answers: { [name.id]: "", [email.id]: "nope" }, consent: true });
+  assert.equal(invalid.status, 400);
+  const fields = (await invalid.json()).fields;
+  assert.deepEqual(Object.keys(fields).sort(), [name.id, email.id, message.id].sort());
+  const noConsent = await submit(form.slug, { answers: { [name.id]: "Ana", [email.id]: "ana@example.com", [message.id]: "Hi" } });
+  assert.equal(noConsent.status, 400);
+  assert.ok((await noConsent.json()).fields.consent);
+  assert.equal((await fetch(new URL(`/f/${form.slug}/submit`, base), { method: "POST", headers: { origin: "https://evil.example", "content-type": "application/json" }, body: "{}" })).status, 403);
+  assert.equal((await submit(form.slug, { answers: { [name.id]: "Bot", [email.id]: "bot@example.com", [message.id]: "x" }, consent: true, company_website: "spam" })).status, 201);
+  const formula = "=HYPERLINK(\"https://evil.example\")";
+  const accepted = await submit(form.slug, { answers: { [name.id]: formula, [email.id]: "ana@example.com", [phone.id]: "+55 11 5555 0000", [message.id]: "Olá\nmundo", unknown: "dropped" }, consent: true });
+  assert.equal(accepted.status, 201);
+
+  const list = await (await request(`/api/forms/${form.id}/responses`, { cookie: owner })).json();
+  assert.equal(list.total, 1, "honeypot answer was not stored");
+  assert.deepEqual(Object.keys(list.responses[0].answers).sort(), [name.id, email.id, phone.id, message.id].sort());
+  assert.equal(list.responses[0].consent_text, "I agree to be contacted about my message.");
+  assert.equal((await (await request(`/api/forms/${form.id}/responses`, { cookie: other })).status), 404);
+  const csv = await (await request(`/api/forms/${form.id}/responses?format=csv`, { cookie: owner })).text();
+  assert.ok(csv.includes("'=HYPERLINK"));
+  assert.ok(csv.includes('"Olá\nmundo"'));
+
+  const edited = { ...form.draft, fields: [name, email, { ...message, label: "Your message" }] };
+  await request(`/api/forms/${form.id}`, { method: "PATCH", cookie: owner, body: { draft: edited } });
+  await request(`/api/forms/${form.id}/publish`, { method: "POST", cookie: owner, body: { publish: true } });
+  const after = await (await request(`/api/forms/${form.id}/responses?format=csv`, { cookie: owner })).text();
+  assert.ok(after.split("\r\n")[0].includes("Your message (edited)"), "answers given to the old wording are flagged");
+  assert.ok(after.split("\r\n")[0].includes("Phone (removed)"), "answers to removed questions stay exportable");
+
+  assert.equal((await request(`/api/forms/${form.id}/responses/${list.responses[0].id}`, { method: "DELETE", cookie: other })).status, 404);
+  await request(`/api/forms/${form.id}`, { method: "PATCH", cookie: owner, body: { accepting_responses: false } });
+  assert.equal((await submit(form.slug, { answers: { [name.id]: "Late", [email.id]: "late@example.com", [message.id]: "x" }, consent: true })).status, 410);
+  assert.match(await (await request(`/f/${form.slug}`)).text(), /not accepting answers/);
+  assert.equal((await request(`/api/forms/${form.id}/responses/${list.responses[0].id}`, { method: "DELETE", cookie: owner })).status, 200);
+  const qr = await (await request(`/api/forms/${form.id}/qr`, { method: "POST", cookie: owner })).json();
+  assert.equal((await (await request(`/api/qr-codes/${qr.qr_code_id}`, { cookie: owner })).json()).qrCode.destination_url, `${base}/f/${form.slug}`);
+  assert.equal((await (await request(`/api/forms/${form.id}`, { method: "DELETE", cookie: owner })).json()).qr_code_deactivated, true);
+  assert.equal((await request(`/f/${form.slug}`)).status, 404);
+});
+
+test("form submissions are rate limited and size limited", async () => {
+  const owner = await register();
+  const form = await newForm(owner, "blank");
+  await request(`/api/forms/${form.id}/publish`, { method: "POST", cookie: owner, body: { publish: true } });
+  const [answer] = form.draft.fields;
+  const big = await submit(form.slug, { answers: { [answer.id]: "x".repeat(40 * 1024) } });
+  assert.equal(big.status, 413);
+  for (let index = 0; index < 30; index++) assert.equal((await submit(form.slug, { answers: { [answer.id]: `A ${index}` } })).status, 201);
+  assert.equal((await submit(form.slug, { answers: { [answer.id]: "one more" } })).status, 429);
+  const browser = { origin: base, "user-agent": "Mozilla/5.0 (Windows NT 10.0) Chrome/131" };
+  assert.equal((await request(`/f/${form.slug}/view`, { method: "POST", headers: browser })).status, 204);
+  const data = await (await request(`/api/forms/${form.id}/responses`, { cookie: owner })).json();
+  assert.equal(data.total, 30);
+  assert.equal(data.stats.views, 1);
+  assert.equal(data.stats.submits, 30);
+  assert.equal(data.responses.length, 30);
+});

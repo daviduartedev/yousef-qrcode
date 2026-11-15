@@ -260,3 +260,50 @@ export const cardContacts = appSchema.table('card_contacts', {
   index('card_contacts_user_created_idx').on(table.userId, table.createdAt),
   foreignKey({ columns: [table.userId, table.cardId], foreignColumns: [cards.userId, cards.id] }).onDelete('cascade'),
 ]).enableRLS();
+
+/** A form with a private draft and the published copy that receives answers at `/f/<slug>`. */
+export const forms = appSchema.table('forms', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  slug: varchar('slug', { length: 40 }).notNull().unique(),
+  title: varchar('title', { length: 120 }).notNull(),
+  template: varchar('template', { length: 32 }).notNull(),
+  creationKey: uuid('creation_key').notNull(),
+  draft: jsonb('draft').notNull(),
+  published: jsonb('published'),
+  isPublished: boolean('is_published').default(false).notNull(),
+  publishedAt: timestamp('published_at', { withTimezone: true }),
+  acceptingResponses: boolean('accepting_responses').default(true).notNull(),
+  qrCodeId: uuid('qr_code_id').references(() => qrCodes.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, table => [
+  unique('forms_user_creation_key_unique').on(table.userId, table.creationKey),
+  unique('forms_user_id_unique').on(table.userId, table.id),
+  index('forms_user_updated_idx').on(table.userId, table.updatedAt),
+]).enableRLS();
+
+/** Answers keep a snapshot of the question labels they were given for, so exports stay readable after edits. */
+export const formResponses = appSchema.table('form_responses', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull(),
+  formId: uuid('form_id').notNull(),
+  answers: jsonb('answers').notNull(),
+  labels: jsonb('labels').notNull(),
+  consentText: varchar('consent_text', { length: 400 }),
+  ipAddress: varchar('ip_address', { length: 64 }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, table => [
+  index('form_responses_form_created_idx').on(table.formId, table.createdAt),
+  foreignKey({ columns: [table.userId, table.formId], foreignColumns: [forms.userId, forms.id] }).onDelete('cascade'),
+]).enableRLS();
+
+export const formEvents = appSchema.table('form_events', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  formId: uuid('form_id').notNull().references(() => forms.id, { onDelete: 'cascade' }),
+  kind: varchar('kind', { length: 16 }).notNull(),
+  occurredAt: timestamp('occurred_at', { withTimezone: true }).defaultNow().notNull(),
+  deviceType: varchar('device_type', { length: 16 }).notNull(),
+  ipAddress: varchar('ip_address', { length: 64 }),
+  userAgent: varchar('user_agent', { length: 1024 }).notNull(),
+}, table => [index('form_events_form_time_idx').on(table.formId, table.occurredAt)]).enableRLS();
